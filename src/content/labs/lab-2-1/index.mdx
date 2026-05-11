@@ -1,0 +1,47 @@
+---
+id: lab-2-1
+moduleId: module-2
+labNumber: Lab 2.1
+title: Your First Investigation
+order: 1
+readTime: 30 minutes
+difficulty: beginner
+isInteractive: true
+description: Run a simulated investigation from intake to findings. Triage a stack of Windows artifacts, look for corroboration across independent sources, and commit to a conclusion for each of HR's questions.
+---
+
+import { LaunchInvestigation } from '@/labs/lab-2-1/LaunchInvestigation'
+
+## Background
+
+Sarah Morgan is a senior engineer at a mid-size technology company called **Meridian Systems**. At **13:45 on Friday, March 13, 2026**, she submitted her two-week notice.
+
+Over that weekend, while drafting Sarah's handoff plan, her manager David Chen pulled the file-share access logs and noticed unusual activity around the proprietary design documents Sarah was the primary collaborator on.
+
+On the morning of **Monday, March 16**, HR contacted your team. Sarah's company laptop has been forensically imaged, and your team is now reviewing the resulting evidence file. You have authorization for HR's investigation under the company's acceptable use policy.
+
+## Objectives
+
+By the end of this lab you should be able to:
+
+- Understand how well-scoped investigative questions lead to relevant evidence.
+- Treat each artifact as a single witness with its own perspective and limits.
+- Build conclusions from corroboration across multiple independent sources.
+- Recognize and set aside red herrings without letting them distort the story.
+
+## Investigative Questions
+
+HR has four specific questions:
+
+1. Did Sarah **access** any proprietary files after submitting her notice?
+2. Were any **external devices** connected to her company laptop?
+3. Did Sarah **transfer** any proprietary files off the laptop?
+4. Is there evidence of **deletion** or an attempt to cover her tracks?
+
+You will be working from a curated set of abstracted Windows artifacts. Each one explains itself when you interrogate it. Your job is to think like an analyst: read each witness, weigh what it can and cannot tell you, and only commit to a conclusion when independent sources line up.
+
+### A note on the artifacts
+
+Every artifact in this lab is a real Windows artifact, presented in an abstracted form. You do **not** need to understand the intricacies yet. Each evidence item introduces itself with a short "what is this" explanation alongside its data, so you can meet each artifact type as you encounter it.
+
+<LaunchInvestigation />

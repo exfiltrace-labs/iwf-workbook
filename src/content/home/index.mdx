@@ -1,0 +1,85 @@
+import hintAndSolutionImg from './images/hint_and_solution.jpg'
+import workbookProgressImg from './images/workbook_progress.jpg'
+
+## Overview
+
+This is the official electronic lab workbook for **TCM Security Academy's Introduction to Windows Forensics** course. It collects every lab from the course in one place, including the written walkthroughs, the investigative questions you will work through as you go, and, for some labs, an interactive workspace that runs directly in your browser.
+
+Each lab is self-contained. Read the writeup at your own pace and answer the questions as you go. Your answers, notes, and progress are saved per lab in your browser, so you can step away from a lab at any point and return exactly to where you left off.
+
+## Labs
+
+<ResumeCard />
+
+<LabGrid />
+
+## How to use the lab workbook
+
+Pick a lab from the **Browse labs** menu in the top navigation, or use the cards above. Read the writeup top to bottom and answer the investigative questions as you go. Your responses are saved automatically as you work.
+
+The questions are interactive. Some ask you to type in a value such as a filename, a registry key, or a timestamp. Others may present a set of options to choose from. Each one gives you immediate feedback on whether your answer is correct. If you get stuck, you can **reveal a hint**, and if you would like to see how the course author worked through the question, you can **open the full solution**.
+
+<Figure
+  src={hintAndSolutionImg}
+  alt="Screenshot of a question with the hint revealed and the full solution expanded."
+  caption="A question with the hint and full solution expanded."
+  width={600}
+/>
+
+On your first pass through a lab, **we encourage you to read the solution alongside the question**. The labs are written to teach the workflow as much as to test it, and following along is often the fastest way to see how the artifact, the tool, and the question fit together. Once you have finished the course, work back through the labs with the solutions hidden to test what you have retained on your own.
+
+For labs that include an interactive workspace, the **Start Lab** button at the bottom of the lab brief launches it. Your progress in the workspace is saved alongside the rest of your work on that lab, and you can move between the brief and the workspace freely at any time.
+
+### Glossary
+
+The workbook ships with a **built-in glossary** of forensic and Windows internals terminology. As you read, the first occurrence of each glossary entry on a page is marked with a dotted underline. Hover or focus on it to see the definition without leaving the page.
+
+**Try it now:** the word NullMRU in this sentence is a glossary entry, so it should appear with a dotted underline above. Hover it to see the tooltip in action.
+
+### Reading aids
+
+Every workbook page uses a consistent reading layout. A **collapsible table of contents** sits in the left sidebar, a thin **progress bar** across the top of the column tracks how far you have scrolled through the writeup, and a **back-to-top button** appears in the lower-right corner once you have scrolled past the first screen.
+
+On any lab with questions, the page header shows a live `n / total answered` counter so you can see your status on that page at a glance. For your overall course progress, the **Browse labs** dropdown in the top navigation shows the percentage of course questions you have answered so far, along with a per-lab breakdown.
+
+<Figure
+  src={workbookProgressImg}
+  alt="Screenshot of the Browse labs dropdown showing the course progress ring and per-lab badges."
+  caption="The Browse labs dropdown with the course progress ring and per-lab status badges."
+  width={600}
+/>
+
+A **Reset all answers** button at the bottom of any lab page lets you wipe your responses for that single lab if you ever want to revisit it without your previous answers in view.
+
+## Updating the lab workbook
+
+The lab workbook is distributed as a **Git repository**, and new labs, corrections, and content updates land on the `main` branch over time. The build hash in the footer of every page identifies the revision you are currently running, so you can check at a glance whether your local copy is behind.
+
+To pull the latest content, open a terminal in the lab workbook directory and run:
+
+```bash
+git pull
+npm install
+npm run dev
+```
+
+The first command fetches the newest commits. The second installs any new dependencies that were added since your last pull. The third restarts the local development server so the updated content is served in your browser.
+
+<Callout type="tip" title="Saving progress">
+  Your answers, notes, and lab progress are stored in your browser's **local storage**, not in the repository itself. Pulling new commits will not erase work you have already done.
+</Callout>
+
+<Callout type="warning" title="Progress is browser-local">
+  Because progress lives in the browser, **it does not follow you across machines or browsers**, and clearing your browser's site data for the workbook will reset it.
+</Callout>
+
+If `git pull` reports a merge conflict, it means a file inside the directory has been changed locally. The simplest fix is to discard those local changes and pull again:
+
+```bash
+git reset --hard
+git pull
+```
+
+## Report an issue
+
+Found a typo, a broken link, or something in a lab that does not look right? Use the **Report an issue** link in the footer of any page to let the course author know. Please include the lab name and a short description of what you saw so the next workbook update will pick up the fix.

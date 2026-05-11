@@ -1,0 +1,40 @@
+---
+id: lab-4-2
+moduleId: module-4
+labNumber: Lab 4.2
+title: Maintaining Chain of Custody
+order: 2
+readTime: 15 minutes
+difficulty: beginner
+isInteractive: true
+description: A broken chain of custody can undermine an entire case. Document the custody transfers of a seized laptop as it moves through a corporate investigation.
+---
+
+import { LaunchCustody } from '@/labs/lab-4-2/LaunchCustody'
+
+## Background
+
+A senior software engineer at **Halcyon Industries**, **David Carter**, is suspected of exfiltrating proprietary source code. On the morning of **Tuesday, March 17, 2026**, HR called Carter into a meeting and seized his company-issued laptop. Over the next several hours that laptop will pass from HR to a forensic examiner, into a transport bag, into an imaging workstation, and ultimately into long-term evidence storage.
+
+You play **Alex Rivera**, the lead forensic examiner on the case. Your job is to document the chain of custody for every one of those transfers. The lab takes you through each event in order. As each event happens, you fill in the matching row on the chain-of-custody form: who released the evidence, who received it, when, what was transferred, why, and how. The form validates each entry against the canonical answer and walks you through what you missed at the end.
+
+## Why this matters
+
+Chain of custody is the load-bearing record of any forensic investigation. If a defense attorney can find a gap, a vague timestamp, or an unaccounted-for handoff in your chain, they can argue the evidence was tampered with or substituted, and the entire case can be undermined regardless of how solid the technical analysis is. This lab gives you the practice that turns the discipline into a habit.
+
+## What you will document
+
+The case has six documented transfer events:
+
+1. **Initial seizure** by HR.
+2. **Onsite handoff** from HR to the forensic examiner.
+3. **Transport** of the device from the HR office to the forensic lab.
+4. **Imaging** of the device, with hash verification.
+5. **Original device** placed into evidence storage.
+6. **Forensic image** moved to the analysis workstation.
+
+Steps 1 through 4 cover the original device only. The imaging step creates a forensic image, which is its own evidence item from that point on. Steps 5a and 5b document the original device and the forensic image separately, each with its own row on the form.
+
+Chain-of-custody forms vary across organizations and jurisdictions. The purpose of this lab is to practice the discipline behind the form, rather than any specific layout.
+
+<LaunchCustody />

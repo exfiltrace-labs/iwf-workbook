@@ -1,0 +1,17 @@
+node_modules
+dist
+dist-ssr
+*.local
+.vite
+.DS_Store
+*.log
+.claude
+
+# Build artifacts emitted by `tsc -b`. The Vite config and the
+# course-metadata module are imported from vite.config.ts, so the TS
+# project references project compiles them to .js / .d.ts on the side.
+vite.config.js
+vite.config.d.ts
+src/content/course.js
+src/content/course.d.ts
+*.tsbuildinfo

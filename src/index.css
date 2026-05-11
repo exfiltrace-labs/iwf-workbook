@@ -1,0 +1,431 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Syntax highlighting theme for fenced code blocks (rehype-highlight).
+   We don't import highlight.js's prebuilt CSS, because those ship a
+   fixed palette and a hard-coded background that would fight the
+   theme-aware CodeBlock surface. Instead, we define `--hl-*` CSS
+   variables in `:root` and `.dark` (further down) and map every hljs
+   token class to those variables. Flipping the `dark` class on
+   `<html>` re-themes both the surrounding card and the syntax tokens
+   in one shot. */
+.hljs {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+.hljs-comment,
+.hljs-quote { color: var(--hl-comment); font-style: italic; }
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag,
+.hljs-formula { color: var(--hl-keyword); }
+.hljs-string,
+.hljs-regexp,
+.hljs-meta .hljs-string { color: var(--hl-string); }
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link { color: var(--hl-number); }
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_,
+.hljs-section { color: var(--hl-title); font-weight: 600; }
+.hljs-variable,
+.hljs-template-variable,
+.hljs-attribute,
+.hljs-attr { color: var(--hl-variable); }
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-type,
+.hljs-class .hljs-title { color: var(--hl-builtin); }
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class { color: var(--hl-tag); }
+.hljs-meta,
+.hljs-meta-keyword { color: var(--hl-meta); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }
+.hljs-addition { color: var(--hl-addition); background: var(--hl-addition-bg); }
+.hljs-deletion { color: var(--hl-deletion); background: var(--hl-deletion-bg); }
+
+@layer base {
+  /*
+   * Theme tokens. Stored as space-separated `R G B` channel triples so
+   * Tailwind's `rgb(var(--x) / <alpha-value>)` syntax (configured in
+   * `tailwind.config.ts`) keeps alpha modifiers like `text-forensic-text/80`
+   * working. Two blocks: `:root` for light, `.dark` (applied to `<html>`
+   * by the theme toggle) for dark.
+   *
+   * Two surface families behave differently across themes:
+   *  - `forensic-code*` and `forensic-navBg` stay dark in both modes
+   *    so the top navbar and the dropdowns/popovers anchored to it
+   *    (lab switcher, search) keep their brand-dark identity even
+   *    against a light page.
+   *  - `forensic-snippet*` (code blocks and hex dumps in the body of
+   *    a lab) theme-switch: GitHub-light palette under `:root` and a
+   *    deep-purple palette under `.dark`. Syntax token colors live
+   *    alongside as `--hl-*` variables consumed by the hljs rules
+   *    above.
+   */
+  :root {
+    color-scheme: light;
+
+    --forensic-bg: 250 250 249;            /* #fafaf9 stone-50 */
+    --forensic-surface: 255 255 255;       /* #ffffff */
+    --forensic-surfaceAlt: 245 245 244;    /* #f5f5f4 stone-100 */
+    --forensic-border: 231 229 228;        /* #e7e5e4 stone-200 */
+    --forensic-borderBright: 214 211 209;  /* #d6d3d1 stone-300 */
+    --forensic-text: 28 25 23;             /* #1c1917 stone-900 */
+    --forensic-textMuted: 87 83 78;        /* #57534e stone-600 */
+    --forensic-textDim: 168 162 158;       /* #a8a29e stone-400 */
+    --forensic-primary: 232 36 89;         /* #e82459 TCM red */
+    --forensic-primarySoft: 254 242 244;   /* #fef2f4 */
+    --forensic-accent: 217 119 6;          /* #d97706 amber-600 */
+    --forensic-accentSoft: 255 251 235;    /* #fffbeb amber-50 */
+    --forensic-corroborated: 5 150 105;    /* #059669 emerald-600 */
+    --forensic-herring: 234 88 12;         /* #ea580c orange-600 */
+    --forensic-context: 100 116 139;       /* #64748b slate-500 */
+
+    /* Nav and nav-anchored popovers stay dark in both themes. */
+    --forensic-codeBg: 37 34 61;           /* #25223d */
+    --forensic-codeHeader: 30 27 53;       /* #1e1b35 */
+    --forensic-codeBorder: 58 54 88;       /* #3a3658 */
+    --forensic-codeText: 228 225 242;      /* #e4e1f2 */
+    --forensic-codeMuted: 163 159 188;     /* #a39fbc */
+    --forensic-navBg: 30 27 53;            /* #1e1b35, matches codeHeader */
+
+    /* In-body snippet surfaces, light mode (GitHub-light inspired). */
+    --forensic-snippetBg: 246 248 250;     /* #f6f8fa */
+    --forensic-snippetHeader: 234 238 242; /* #eaeef2 */
+    --forensic-snippetBorder: 208 215 222; /* #d0d7de */
+    --forensic-snippetText: 31 35 40;      /* #1f2328 */
+    --forensic-snippetMuted: 101 109 118;  /* #656d76 */
+
+    /* Syntax token palette, light mode. */
+    --hl-comment: #6a737d;
+    --hl-keyword: #cf222e;
+    --hl-string:  #0a3069;
+    --hl-number:  #0550ae;
+    --hl-title:   #6639ba;
+    --hl-variable:#953800;
+    --hl-builtin: #0550ae;
+    --hl-tag:     #116329;
+    --hl-meta:    #6a737d;
+    --hl-addition:    #1a7f37;
+    --hl-addition-bg: #dafbe1;
+    --hl-deletion:    #82071e;
+    --hl-deletion-bg: #ffebe9;
+
+    /* Decorative tints used by the body background gradient. */
+    --forensic-tint-blue: 37 99 235;       /* #2563eb */
+    --forensic-tint-amber: 217 119 6;      /* #d97706 */
+  }
+
+  html.dark {
+    color-scheme: dark;
+
+    --forensic-bg: 15 13 30;               /* deep navy/purple */
+    --forensic-surface: 26 23 48;          /* card surface */
+    --forensic-surfaceAlt: 37 34 61;       /* matches code body */
+    --forensic-border: 46 42 74;
+    --forensic-borderBright: 64 58 96;
+    --forensic-text: 235 232 248;          /* near-white */
+    --forensic-textMuted: 174 170 198;
+    --forensic-textDim: 124 118 154;
+    --forensic-primary: 244 84 122;        /* lifted slightly for dark */
+    --forensic-primarySoft: 60 18 32;
+    --forensic-accent: 251 191 36;         /* amber-300 */
+    --forensic-accentSoft: 60 45 10;
+    --forensic-corroborated: 52 211 153;   /* emerald-300 */
+    --forensic-herring: 251 146 60;        /* orange-400 */
+    --forensic-context: 148 163 184;       /* slate-400 */
+
+    /* Nav and nav-anchored popovers (unchanged from light mode). */
+    --forensic-codeBg: 37 34 61;
+    --forensic-codeHeader: 30 27 53;
+    --forensic-codeBorder: 58 54 88;
+    --forensic-codeText: 228 225 242;
+    --forensic-codeMuted: 163 159 188;
+    --forensic-navBg: 22 19 42;            /* a touch darker than light mode nav */
+
+    /* In-body snippet surfaces, dark mode (deep purple matches page). */
+    --forensic-snippetBg: 37 34 61;        /* #25223d */
+    --forensic-snippetHeader: 30 27 53;    /* #1e1b35 */
+    --forensic-snippetBorder: 58 54 88;    /* #3a3658 */
+    --forensic-snippetText: 228 225 242;   /* #e4e1f2 */
+    --forensic-snippetMuted: 163 159 188;  /* #a39fbc */
+
+    /* Syntax token palette, dark mode (GitHub-dark inspired). */
+    --hl-comment: #8b949e;
+    --hl-keyword: #ff7b72;
+    --hl-string:  #a5d6ff;
+    --hl-number:  #79c0ff;
+    --hl-title:   #d2a8ff;
+    --hl-variable:#ffa657;
+    --hl-builtin: #79c0ff;
+    --hl-tag:     #7ee787;
+    --hl-meta:    #8b949e;
+    --hl-addition:    #aff5b4;
+    --hl-addition-bg: #033a16;
+    --hl-deletion:    #ffdcd7;
+    --hl-deletion-bg: #67060c;
+
+    --forensic-tint-blue: 88 120 240;
+    --forensic-tint-amber: 251 191 36;
+  }
+
+  html {
+    /* Bumps the whole UI to ~125% so the lab reads comfortably without
+       requiring users to zoom. Tailwind's rem-based scale picks this up
+       automatically for both type and spacing. We multiply against the
+       user's chosen browser default (instead of hard-coding pixels) so
+       a student who has bumped their browser font size still gets a
+       proportional bump on top of ours. */
+    font-size: 125%;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  html,
+  body {
+    overflow: hidden;
+  }
+
+  body {
+    font-feature-settings: 'cv11', 'ss01';
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgb(var(--forensic-tint-blue) / 0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 100% 100%, rgb(var(--forensic-tint-amber) / 0.05) 0%, transparent 60%),
+      rgb(var(--forensic-bg));
+    background-attachment: fixed;
+    color: rgb(var(--forensic-text));
+  }
+
+  ::selection {
+    background: rgb(var(--forensic-tint-blue) / 0.18);
+    color: rgb(var(--forensic-text));
+  }
+
+  /* Tailwind Typography defaults its bullet, counter, and body colors to
+     light-mode greys that wash out against the dark page background. Lift
+     the prose CSS variables in dark mode so list markers, body copy, and
+     emphasis stay legible. */
+  html.dark .prose {
+    --tw-prose-body: rgb(var(--forensic-text));
+    --tw-prose-headings: rgb(var(--forensic-text));
+    --tw-prose-lead: rgb(var(--forensic-textMuted));
+    --tw-prose-links: rgb(var(--forensic-primary));
+    --tw-prose-bold: rgb(var(--forensic-text));
+    --tw-prose-counters: rgb(var(--forensic-textMuted));
+    --tw-prose-bullets: rgb(var(--forensic-textMuted));
+    --tw-prose-hr: rgb(var(--forensic-border));
+    --tw-prose-quotes: rgb(var(--forensic-text));
+    --tw-prose-quote-borders: rgb(var(--forensic-border));
+    --tw-prose-captions: rgb(var(--forensic-textDim));
+    --tw-prose-code: rgb(var(--forensic-text));
+    --tw-prose-pre-code: rgb(var(--forensic-snippetText));
+    --tw-prose-pre-bg: rgb(var(--forensic-snippetBg));
+    --tw-prose-th-borders: rgb(var(--forensic-border));
+    --tw-prose-td-borders: rgb(var(--forensic-border));
+  }
+
+  /* Native checkbox/radio backgrounds default to a flat light grey that
+     reads as a washed-out rectangle on the dark page. Re-skin them with
+     `appearance: none` and our forensic surface tokens so the unchecked
+     state matches the surrounding cards and the checked state shows a
+     filled primary swatch with a glyph drawn from a CSS mask. Light mode
+     keeps the native control. */
+  html.dark input[type='checkbox'],
+  html.dark input[type='radio'] {
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: rgb(var(--forensic-surface));
+    border: 1px solid rgb(var(--forensic-borderBright));
+    width: 1rem;
+    height: 1rem;
+    display: inline-block;
+    vertical-align: middle;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+  html.dark input[type='checkbox'] {
+    border-radius: 0.25rem;
+  }
+  html.dark input[type='radio'] {
+    border-radius: 9999px;
+  }
+  html.dark input[type='checkbox']:hover:not(:disabled),
+  html.dark input[type='radio']:hover:not(:disabled) {
+    border-color: rgb(var(--forensic-primary) / 0.6);
+  }
+  html.dark input[type='checkbox']:focus-visible,
+  html.dark input[type='radio']:focus-visible {
+    outline: 2px solid rgb(var(--forensic-primary) / 0.5);
+    outline-offset: 2px;
+  }
+  html.dark input[type='checkbox']:checked,
+  html.dark input[type='radio']:checked {
+    background-color: rgb(100 116 139);
+    border-color: rgb(100 116 139);
+  }
+  html.dark input[type='checkbox']:checked::after {
+    content: '';
+    display: block;
+    width: 100%;
+    height: 100%;
+    background-color: white;
+    -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.5l3 3 6-6'/></svg>") center / 80% no-repeat;
+            mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.5l3 3 6-6'/></svg>") center / 80% no-repeat;
+  }
+  html.dark input[type='radio']:checked::after {
+    content: '';
+    display: block;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin: 0.2rem auto;
+    border-radius: 9999px;
+    background-color: white;
+  }
+  html.dark input[type='checkbox']:disabled,
+  html.dark input[type='radio']:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+}
+
+@layer components {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Glossary term: dotted underline + hover/focus tooltip. Injected by
+     LabWorkbook's auto-link effect, so we style it from CSS rather than as
+     a React component. */
+  .glossary-term {
+    position: relative;
+    display: inline-block;
+  }
+  .glossary-term-label {
+    cursor: help;
+    border-bottom: 1px dotted rgb(var(--forensic-primary) / 0.6);
+    color: inherit;
+  }
+  .glossary-term-tooltip {
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    z-index: 30;
+    margin-top: 0.25rem;
+    width: max-content;
+    max-width: min(18rem, calc(100vw - 1.5rem));
+    /* `--tooltip-shift` is set in JS on hover so the tooltip can scoot
+       sideways when the term is near a viewport edge. Defaults to 0. */
+    transform: translate(calc(-50% + var(--tooltip-shift, 0px)), 0.25rem);
+    border: 1px solid rgb(var(--forensic-border));
+    background: rgb(var(--forensic-surface));
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.18);
+    font-size: 12px;
+    font-weight: 400;
+    font-style: normal;
+    text-decoration: none;
+    line-height: 1.45;
+    color: rgb(var(--forensic-text));
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 120ms ease-out;
+    overflow-wrap: anywhere;
+  }
+  .glossary-term:hover .glossary-term-tooltip,
+  .glossary-term:focus-within .glossary-term-tooltip {
+    pointer-events: auto;
+    opacity: 1;
+  }
+  .glossary-term-tooltip-title {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgb(var(--forensic-textMuted));
+    margin-bottom: 0.25rem;
+  }
+  .glossary-term-tooltip code {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    background: rgb(var(--forensic-surfaceAlt));
+    color: rgb(var(--forensic-primary));
+    border-radius: 3px;
+    padding: 0 0.25rem;
+  }
+  .glossary-term-tooltip strong {
+    font-weight: 600;
+    color: rgb(var(--forensic-text));
+  }
+  .glossary-term-tooltip em {
+    font-style: italic;
+  }
+
+/* Slim, dark-friendly scrollbar for popovers like the course progress
+     and lab switcher dropdowns. Uses the modern `scrollbar-*` properties
+     in Firefox and a `::-webkit-scrollbar` shim for Chrome/Safari. */
+  .nav-popover-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  }
+  .nav-popover-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .nav-popover-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .nav-popover-scroll::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.18);
+    border-radius: 9999px;
+  }
+  .nav-popover-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+  }
+}
+
+/* Radix animation utilities */
+@layer utilities {
+  @keyframes slide-in-from-right {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes slide-out-to-right {
+    from { transform: translateX(0); }
+    to { transform: translateX(100%); }
+  }
+  @keyframes fade-in-0 {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes fade-out-0 {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  .animate-in {
+    animation-duration: 250ms;
+    animation-fill-mode: both;
+  }
+  .animate-out {
+    animation-duration: 200ms;
+    animation-fill-mode: both;
+  }
+  .slide-in-from-right { animation-name: slide-in-from-right; }
+  .slide-out-to-right { animation-name: slide-out-to-right; }
+  .fade-in-0 { animation-name: fade-in-0; }
+  .fade-out-0 { animation-name: fade-out-0; }
+}
