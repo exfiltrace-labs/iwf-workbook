@@ -22,9 +22,13 @@ interface LabShellProps {
  */
 export function LabShell({ courseName, children }: LabShellProps) {
   return (
-    <div className="flex h-screen w-full flex-col bg-forensic-bg text-forensic-text antialiased">
-      <LabNav courseName={courseName} />
-      <main className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</main>
+    <div className="flex h-screen w-full flex-col bg-forensic-bg text-forensic-text antialiased print:h-auto print:block">
+      <div className="print:hidden">
+        <LabNav courseName={courseName} />
+      </div>
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden print:min-h-0 print:flex-none print:overflow-visible print:block">
+        {children}
+      </main>
     </div>
   )
 }

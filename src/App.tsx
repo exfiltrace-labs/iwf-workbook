@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { LabShell } from '@/components/LabShell'
@@ -25,6 +25,29 @@ const Lab42Custody = lazy(() => import('@/labs/lab-4-2/CustodyApp'))
  * and the 404 page.
  */
 export default function App() {
+  // While a print preview is open, force the document into light theme so
+  // hardcoded Tailwind `dark:` utility classes (e.g. `dark:text-emerald-200`
+  // on callout titles) don't bleed light-mode-incompatible colors onto the
+  // printed page. The print stylesheet handles CSS-variable surfaces; this
+  // handles the rest. The user's theme is restored after print closes.
+  useEffect(() => {
+    let restoreDark = false
+    const onBeforePrint = () => {
+      const root = document.documentElement
+      restoreDark = root.classList.contains('dark')
+      if (restoreDark) root.classList.remove('dark')
+    }
+    const onAfterPrint = () => {
+      if (restoreDark) document.documentElement.classList.add('dark')
+    }
+    window.addEventListener('beforeprint', onBeforePrint)
+    window.addEventListener('afterprint', onAfterPrint)
+    return () => {
+      window.removeEventListener('beforeprint', onBeforePrint)
+      window.removeEventListener('afterprint', onAfterPrint)
+    }
+  }, [])
+
   return (
     <BrowserRouter>
       <LabShell courseName={COURSE.name}>

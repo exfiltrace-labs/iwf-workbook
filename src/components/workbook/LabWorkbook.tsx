@@ -300,12 +300,12 @@ export function LabWorkbook({
   }
 
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full print:h-auto">
       {/* Reading progress bar - sits above the scroll container so it does
           not get clipped or scroll with the content. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 z-20 h-[3px] bg-transparent"
+        className="pointer-events-none absolute inset-x-0 top-0 z-20 h-[3px] bg-transparent print:hidden"
       >
         <div
           className="h-full bg-forensic-primary transition-[width] duration-150 ease-out"
@@ -313,7 +313,7 @@ export function LabWorkbook({
         />
       </div>
 
-      <div ref={scrollRef} className="h-full w-full overflow-y-auto overflow-x-hidden bg-forensic-bg">
+      <div ref={scrollRef} className="h-full w-full overflow-y-auto overflow-x-hidden bg-forensic-bg print:h-auto print:overflow-visible">
         <div className="mx-auto w-full max-w-6xl px-6 pt-10 pb-4">
           <div
             className={cn(
@@ -328,7 +328,7 @@ export function LabWorkbook({
                 separate it from the main reading column. */}
             <aside
               className={cn(
-                'hidden lg:block',
+                'hidden lg:block print:hidden',
                 !tocCollapsed && 'lg:border-r lg:border-forensic-border/70 lg:pr-6',
               )}
             >
@@ -348,7 +348,7 @@ export function LabWorkbook({
               {breadcrumbs && breadcrumbs.length > 0 && (
                 <nav
                   aria-label="Breadcrumb"
-                  className="mb-4 flex flex-wrap items-center gap-1 text-[12px] text-forensic-textMuted"
+                  className="mb-4 flex flex-wrap items-center gap-1 text-[12px] text-forensic-textMuted print:hidden"
                 >
                   {breadcrumbs.map((crumb, i) => {
                     const isLast = i === breadcrumbs.length - 1
@@ -474,7 +474,7 @@ export function LabWorkbook({
               {footer && <div className="mt-10">{footer}</div>}
 
               {cta && (
-                <div className="mt-12 flex justify-end border-t border-forensic-border pt-6">
+                <div className="mt-12 flex justify-end border-t border-forensic-border pt-6 print:hidden">
                   <Button variant="default" onClick={cta.onClick}>
                     {cta.label}
                     <ArrowRight className="h-3.5 w-3.5" />
@@ -483,7 +483,7 @@ export function LabWorkbook({
               )}
 
               {totalQuestions > 0 && (
-                <div className="mt-10 flex justify-end">
+                <div className="mt-10 flex justify-end print:hidden">
                   <button
                     type="button"
                     onClick={handleResetAll}
@@ -499,7 +499,7 @@ export function LabWorkbook({
               {(prevLab || nextLab) && (
                 <nav
                   aria-label="Lab navigation"
-                  className="mt-10 flex flex-col gap-3 border-t border-forensic-border pt-6 sm:flex-row sm:items-stretch sm:justify-between"
+                  className="mt-10 flex flex-col gap-3 border-t border-forensic-border pt-6 sm:flex-row sm:items-stretch sm:justify-between print:hidden"
                 >
                   {prevLab ? (
                     <button
@@ -558,7 +558,7 @@ export function LabWorkbook({
         tabIndex={showBackToTop ? 0 : -1}
         aria-hidden={!showBackToTop}
         className={cn(
-          'absolute bottom-6 right-6 z-30 inline-flex h-10 w-10 items-center justify-center rounded-full border border-forensic-border bg-forensic-surface text-forensic-text shadow-lab transition-all hover:border-forensic-primary/40 hover:text-forensic-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-forensic-primary/40',
+          'absolute bottom-6 right-6 z-30 inline-flex h-10 w-10 items-center justify-center rounded-full border border-forensic-border bg-forensic-surface text-forensic-text shadow-lab transition-all hover:border-forensic-primary/40 hover:text-forensic-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-forensic-primary/40 print:hidden',
           showBackToTop ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
       >
@@ -612,7 +612,7 @@ function WorkbookFooter() {
   )}`
   const dot = <span aria-hidden="true" className="px-2 text-forensic-border">·</span>
   return (
-    <footer className="mt-12 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-forensic-border pt-3 pb-1 text-[12px] text-forensic-textMuted">
+    <footer className="mt-12 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-forensic-border pt-3 pb-1 text-[12px] text-forensic-textMuted print:hidden">
       <span className="flex items-center">
         &copy; {year}{' '}
         <a

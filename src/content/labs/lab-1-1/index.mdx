@@ -4,7 +4,7 @@ moduleId: module-1
 labNumber: Lab 1.1
 title: Lab Setup
 order: 1
-readTime: 45 minutes
+readTime: 60 minutes
 difficulty: beginner
 description: Stand up your own Windows 11 forensic workstation VM, acquire the course files, and snapshot a clean, consistent course environment.
 references:
@@ -24,10 +24,6 @@ references:
     label: Windows 11 Enterprise Evaluation download
     url: https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise
     detail: Microsoft Evaluation Center
-  - id: win11-requirements
-    label: Windows 11 system requirements
-    url: https://www.microsoft.com/en-us/windows/windows-11-specifications
-    detail: Microsoft
   - id: set-execution-policy
     label: Set-ExecutionPolicy reference
     url: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/set-executionpolicy
@@ -44,29 +40,30 @@ references:
     label: Magnet DumpIt for Windows
     url: https://www.magnetforensics.com/resources/magnet-dumpit-for-windows/
     detail: Magnet Forensics
-  - id: zimmerman-tools
-    label: Eric Zimmerman's Tools
-    url: https://ericzimmerman.github.io/
-    detail: Eric Zimmerman
-  - id: winpmem
-    label: WinPmem releases
-    url: https://github.com/Velocidex/WinPmem/releases
-    detail: Velocidex
-  - id: seven-zip
-    label: 7-Zip
-    url: https://www.7-zip.org/
-    detail: Igor Pavlov
-  - id: keka
-    label: Keka, the macOS file archiver
-    url: https://www.keka.io/
-  - id: unblock-file
-    label: Unblock-File PowerShell cmdlet reference
-    url: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/unblock-file
+  - id: kape
+    label: KAPE (Kroll Artifact Parser and Extractor)
+    url: https://www.kroll.com/en/services/cyber-risk/incident-response-litigation-support/kroll-artifact-parser-extractor-kape
+    detail: Kroll
+  - id: magnet-ram-capture
+    label: Magnet RAM Capture
+    url: https://www.magnetforensics.com/resources/magnet-ram-capture/
+    detail: Magnet Forensics
+  - id: edh
+    label: Elcomsoft Encrypted Disk Hunter
+    url: https://www.elcomsoft.com/edh.html
+    detail: Elcomsoft
+  - id: wbvu
+    label: WiebeTech Write Block Validation Utility
+    url: https://cdsg.com/products/usb-writeblocker
+    detail: DigiStor
+  - id: sysinternals
+    label: Sysinternals Suite
+    url: https://learn.microsoft.com/en-us/sysinternals/downloads/sysinternals-suite
     detail: Microsoft Learn
-  - id: mount-diskimage
-    label: Mount-DiskImage PowerShell cmdlet reference
-    url: https://learn.microsoft.com/en-us/powershell/module/storage/mount-diskimage
-    detail: Microsoft Learn
+  - id: aim
+    label: Arsenal Image Mounter
+    url: https://arsenalrecon.com/downloads
+    detail: Arsenal Recon
   - id: dg-readiness
     label: Device Guard and Credential Guard hardware readiness tool
     url: https://www.microsoft.com/en-us/download/details.aspx?id=53337
@@ -77,14 +74,33 @@ references:
     detail: Microsoft Learn
 ---
 
+import vmware1 from './images/vmware_1.png'
+import vmware2 from './images/vmware_2.png'
+import vmware3 from './images/vmware_3.png'
+import windowsInstall1 from './images/windows_install_1.png'
+import windowsInstallUpdate from './images/windows_install_update.png'
+import vmwareTools1 from './images/vmware_tools_1.png'
+import vmwareTools2 from './images/vmware_tools_2.png'
+import snapshot1 from './images/snapshot_1.png'
+import snapshot2 from './images/snapshot_2.png'
+import isoA from './images/iso_a.png'
+import isoA2 from './images/iso_a_2.png'
+import powershell1 from './images/powershell_1.png'
+import setupA2 from './images/setup_a_2.png'
+import snapshot3 from './images/snapshot_3.png'
+import isoB from './images/iso_b.png'
+import isoB2 from './images/iso_b_2.png'
+import workbook1 from './images/workbook_1.png'
+import snapshot4 from './images/snapshot_4.png'
+
 ## Welcome
 
-Welcome to **TCM Security Academy's Introduction to Windows Forensics**. This first lab is the only one with any real setup. You will install a hypervisor on your host, build a clean Windows 11 virtual machine, attach the course ISO containing the class files, and run the setup script.
+Welcome to **TCM Security Academy's Introduction to Windows Forensics**. This first lab is the only one with any major setup. You will install a hypervisor on your host, build a clean Windows 11 virtual machine, attach the two course ISOs, and run their setup scripts.
 
 By the end of this lab you will have a snapshot of a fully configured **course VM**. The majority of labs in this course are performed inside that VM. Treat your host machine purely as a place to run the hypervisor.
 
 <Callout type="note" title="A note on the lab workbook">
-  You are most likely reading this lab on your host machine, before the course VM exists. Once the VM is running, the setup script installs a local copy of this same workbook inside it, and a desktop shortcut opens it in the VM's browser.
+  You are most likely reading this lab on your host machine, before the course VM exists. Once the VM is fully set up, an electronic copy of this same workbook runs inside it and a desktop shortcut opens it in the VM's browser.
 </Callout>
 
 ## What you will need
@@ -104,7 +120,7 @@ Make sure your host machine meets the following minimums before you start:
 You will also need accounts and tools:
 
 - A valid email address. Microsoft requires one to register and download the Windows 11 Eval ISO.
-- Access to the **TCM Security Academy course portal**, where the course ISO is hosted.
+- Access to the **TCM Security Academy course portal**, where the *course ISOs* are hosted.
 - A **hypervisor**. VMware Workstation Pro on Windows or Linux, and VMware Fusion Pro on macOS, are both free for personal use as of November 2024<Cite id="vmware-personal-use" /> and are the recommended option for this course. [VirtualBox](https://www.virtualbox.org/wiki/Downloads)<Cite id="virtualbox" /> will also work as a fallback.
 
 ## Step 1: Install your hypervisor
@@ -130,172 +146,378 @@ Go to the [Microsoft Evaluation Center](https://www.microsoft.com/en-us/evalcent
 
 Save the ISO somewhere on a fast local drive. Do not save it inside a folder synchronized by OneDrive, iCloud Drive, Dropbox, or Google Drive. Cloud sync clients can lock or rewrite large files in the background and corrupt them mid-transfer.
 
-## Step 3: Download the course ISO
+## Step 3: Download the course ISOs
 
-Sign in to the TCM Security Academy course portal and locate the **Introduction to Windows Forensics** course materials. Download the **course ISO**. It is approximately **5 GB**.
+Sign in to the TCM Security Academy course portal and locate the **Introduction to Windows Forensics** course materials. There are **two** additional ISOs to download:
 
-You do **not** need to extract this ISO or mount it on your host. You will be attaching it directly to the VM in Step 8, after the VM is built. Save it to the same place as the Windows 11 Eval ISO.
+- **`WF_A.iso`** is the forensic workstation setup. It installs every tool and tweak for the Windows forensics curriculum. Approximately **3 GB**.
+- **`WF_B.iso`** contains the course exercises and the lab workbook.
+
+Each ISO ships **inside a password-protected `.zip`**. Extract both zips on your host so the `.iso` files sit alongside the Windows 11 Eval ISO. You do **not** need to mount either ISO on your host after extraction. You will attach them directly to the VM, one at a time, in later steps.
+
+**The password for both archives is:** `forensics`
 
 ## Step 4: Create the VM
 
 Launch VMware. From the **File** menu, choose **New Virtual Machine** and walk through the wizard:
 
-1. **Configuration type:** choose **Custom** so you can pin the disk size and CPU/RAM yourself.
-2. **Hardware compatibility:** pick the latest version offered.
-3. **Guest operating system installation:** choose **Installer disc image (ISO)** and browse to the **Windows 11 Eval ISO** you downloaded in Step 2. (Not the course ISO. That comes later.)
-4. **Guest operating system:** Microsoft Windows. Version: **Windows 11 x64**.
-5. **Virtual machine name and location:** call it something like `tcm-windows-forensics`. Save it on a fast local drive with plenty of free space, in a folder that is **not** synced by OneDrive, iCloud Drive, Dropbox, or Google Drive.
-6. **Processors:** 1 processor, 4 cores per processor (4 vCPUs total).
-7. **Memory:** **8192 MB** (8 GB).
-8. **Network:** **NAT**. The VM gets internet through the host.
-9. **I/O controller, disk, virtual disk type:** accept the defaults VMware suggests for Windows 11.
-10. **Disk capacity:** **100 GB**. Choose **Store virtual disk as a single file**.
+<Figure
+  src={vmware1}
+  alt="VMware Workstation Pro File menu open with New Virtual Machine highlighted"
+  caption="VMware File menu → New Virtual Machine launches the wizard you walk through below."
+  width={800}
+/>
 
-Before finishing the wizard, click **Customize Hardware** and confirm two things:
+1. **Configuration type:** choose **Typical (recommended)**.
+2. **Guest operating system installation:** choose **Installer disc image (ISO)** and browse to the **Windows 11 Eval ISO** you downloaded in Step 2. (Not the course ISO. That comes later).
+    - Confirm Microsoft Windows / **Windows 11 x64** (VMware auto-detects this from the ISO in most cases).
+3. **Virtual machine name and location:** call it something like `tcm-windows-forensics`. Save it on a fast local drive with plenty of free space, in a folder that is **not** synced by OneDrive, iCloud Drive, Dropbox, or Google Drive.
+4. **Encryption Information:** Windows 11 requires TPM 2.0, and VMware can only emulate a TPM on an encrypted VM. Choose **"Only the files needed to support a TPM are encrypted"** (the recommended option).
+    - Set a password and **write it down somewhere you can find it**. Losing it means you cannot boot this VM again.
+    - Leave **Remember the password on this machine in Credential Manager** checked so you do not have to retype it every time you power the VM on. The password is still required if you ever move the VM to a different host.
+5. **Disk capacity:** **100 GB**. It is recommended to choose **Store virtual disk as a single file** for faster I/O and simpler backups.
 
-- **Encryption / Secure Boot / TPM:** Windows 11 requires Secure Boot and TPM 2.0. VMware Workstation Pro will add both automatically for a Windows 11 guest. If it prompts you to set a VM encryption password to enable TPM, do so and write the password down somewhere you can find it. Losing it means you cannot boot this VM again.
+Before finishing the wizard, click **Customize Hardware** and apply the recommended settings:
+
+- **Memory:** **8192 MB** (8 GB).
+- **Processors:** 1 processor, 4 cores per processor (4 vCPUs total).
 - **CD/DVD drive:** confirm it is pointing at the Windows 11 Eval ISO and that **Connect at power on** is checked.
+- **Network Adapter:** **NAT**. The VM gets internet through the host.
+
+<Figure
+  src={vmware2}
+  alt="The Customize Hardware dialog reached from the New Virtual Machine wizard."
+  caption="The Customize Hardware dialog reached from the New Virtual Machine wizard."
+  width={450}
+/>
 
 Finish the wizard, but *do not boot the VM yet*.
 
+<Figure
+  src={vmware3}
+  alt="VMware Workstation Pro library view showing the newly created tcm-windows-forensics VM as a tab"
+  caption="VMware Workstation Pro library view showing the newly created tcm-windows-forensics VM as a tab."
+  width={800}
+/>
+
 ## Step 5: Install Windows 11
 
-Power on the VM. The Windows installer will boot from the Eval ISO. Walk through it slowly. The answers below are picked to keep every student's VM consistent so the rest of the labs behave the same way.
+Power on the VM. The Windows installer will boot from the Eval ISO. Walk through the prompts as follows:
 
-1. **Language to install:** English (United States).
-2. **Time and currency format:** English (United States).
-3. **Keyboard or input method:** US.
-4. Click **Install now**.
-5. **Activate Windows:** click **I don't have a product key**. The Eval ISO does not need one.
-6. **Operating system:** **Windows 11 Enterprise** is the only option.
-7. **License terms:** accept.
-8. **Which type of installation:** **Custom: Install Windows only**.
-9. **Where to install:** select the only disk listed and click **Next**. Windows will partition and format it.
+1. **Select language settings.**
+    - **Language to install:** pick whatever suits your needs.
+    - **Time and currency format:** pick whatever suits your needs.
+2. **Select keyboard settings.**
+    - **Keyboard or input method:** pick whatever suits your needs.
+3. **Select setup option:** **Install Windows 11**.
+    - Tick the **I agree everything will be deleted including files, apps, and settings** confirmation.
+4. **Accept the license terms.**
+5. **Select location to install Windows 11:** select the only disk listed and click **Next**. Windows will partition and format it.
+6. **Ready to install:** click **Install**.
 
-Windows will copy files, reboot a few times, and eventually arrive at the **out-of-box experience (OOBE)** with the country picker. Continue with these answers:
+The install will take several minutes. The installer shows a progress percentage and reboots the VM a couple of times on its own.
 
-1. **Country or region:** United States.
-2. **Keyboard layout:** US. **Skip** the second keyboard prompt.
-3. **Name your device:** anything you like. `tcm-vm` is a fine default.
-4. **Sign-in options:** the Enterprise Eval ISO will let you create a **local account** directly. Choose **Domain join instead** or **Sign-in options → Offline account**, depending on which prompt your build of the ISO shows. You want the path that says "create a local user."
-5. **User name:** anything you like. `examiner` is the placeholder shown in later screenshots. The course does not require a specific username.
-6. **Password:** anything you like. Pick something you can remember; the VM is disposable but you will type the password every time you sign in.
-7. **Security questions:** answer however you like.
-8. **Privacy settings:** turn **all of them off**. Location, Find my device, Diagnostic data, Inking and typing, Tailored experiences, Advertising ID. None of them apply to a forensic lab VM.
+<Figure
+  src={windowsInstall1}
+  alt="Windows 11 installer screen reading Installing Windows 11. Your PC will restart several times. This might take a while."
+  caption="The installer's progress screen. The VM will likely reboot on its own a few times."
+  width={500}
+/>
 
-After the privacy screen Windows will finish setting up your profile. The first sign-in usually takes a minute or two.
+Once it finishes, the VM arrives at the **out-of-box experience (OOBE)** with the country picker. Walk through the prompts as follows:
+
+1. **Is this the right country or region?** pick whatever suits your needs.
+2. **Is this the right keyboard layout or input method?** pick whatever suits your needs.
+3. **Want to add a second keyboard layout?** add another layout or click **Skip**, your choice.
+4. The installer will likely check for updates at this point and may apply a small batch before continuing. Let it run.
+5. **Let's set things up for your work or school:** click **Sign-in options** in the lower left.
+    - Choose **Domain join instead**. This is the path that creates a local user instead of forcing a Microsoft account.
+6. **Who's going to use this device?**
+    - **Enter your name (username):** `tcm`
+    - **Enter a password:** Pick something you can remember. You will type it every time you sign in to the VM.
+    - **Confirm password.**
+    - **Security questions:** answer however you like.
+7. **Choose privacy settings for your device:** turn **all of them off**.
+8. Windows will **download and install pending updates**, then finish setting up your profile and drop you on the desktop. The first sign-in usually takes quite a few minutes.
 
 <Callout type="tip" title="If Windows refuses to create a local account">
   Some Windows 11 builds make the local-account path hard to find. If the OOBE will not let you create a local user, press **Shift+F10** on the Microsoft account screen to open a Command Prompt, run `oobe\bypassnro`, and the VM will reboot back into OOBE with a local-account option available. On Windows 11 24H2 and later, run `start ms-cxh:localonly` instead at the same prompt.
 </Callout>
 
+<Figure
+  src={windowsInstallUpdate}
+  alt="Windows 11 post-OOBE update download screen"
+  caption="After the OOBE prompts, Windows pulls any pending updates before bringing you to the desktop. The VM may reboot on its own once or twice during this phase."
+  width={800}
+/>
+
 ## Step 6: Install VMware Tools
 
 Once you are on the Windows desktop, install **VMware Tools** so clipboard sharing, screen resizing, and drag-and-drop between host and VM all work.
 
-From the VMware menu bar, choose **VM → Install VMware Tools**. Windows will mount a virtual DVD with the VMware Tools installer. Open File Explorer, browse to the new DVD drive, and run `setup64.exe`. Accept the defaults. Reboot when prompted.
+From the VMware menu bar, choose **VM → Install VMware Tools**. Windows will mount a virtual DVD with the VMware Tools installer. 
+
+<Figure
+  src={vmwareTools1}
+  alt="VMware Workstation Pro VM menu open with Install VMware Tools highlighted"
+  caption="VMware menu → VM → Install VMware Tools mounts the Tools installer as a virtual DVD inside the running VM."
+  width={600}
+/>
+
+Open File Explorer, browse to the new DVD drive, and run `setup64.exe`. Accept the defaults. Reboot when prompted.
+
+<Figure
+  src={vmwareTools2}
+  alt="Windows AutoPlay notification for DVD Drive (D:) VMware Tools with Run setup.exe highlighted"
+  caption="Windows shows an AutoPlay prompt for the newly mounted VMware Tools DVD. Click Run setup.exe to launch the installer."
+  width={400}
+/>
+
+The prompt only appears briefly. If you missed it, open File Explorer, navigate to the **DVD Drive (D:) VMware Tools** entry under **This PC**, and double-click `setup64.exe` to launch the installer manually.
 
 After the reboot, your VMware window should resize cleanly when you drag its corners. If it does not, VMware Tools did not install correctly. Re-run the installer.
 
+<Callout type="note" title="On other hypervisors">
+  Most hypervisors ship their own guest-integration package that does the same job as VMware Tools. VirtualBox calls it **Guest Additions**, Hyper-V uses the built-in **Hyper-V Integration Services**, Parallels has **Parallels Tools**, etc. If you are not on VMware, install whichever your hypervisor provides before moving on. Check your hypervisor's documentation for the exact steps.
+</Callout>
+
 ## Step 7: Take a `fresh-install` snapshot
 
-Before you go any further, take a snapshot of the clean Windows 11 install. If anything goes wrong from here on, you can roll back to this snapshot instead of redoing Steps 2 through 6.
+Before you go any further, take a snapshot of the clean Windows 11 install. If anything goes wrong from here on, you can roll back to this snapshot instead of redoing the previous steps.
 
 1. Right-click the VM in your VMware library.
 2. Choose **Snapshot → Take Snapshot**.
 3. Name it `fresh-install` and click **Take Snapshot**.
 
-## Step 8: Attach the course ISO to the VM
+<Figure
+  src={snapshot1}
+  alt="VMware Workstation Pro VM menu open with Snapshot and Take Snapshot highlighted"
+  caption="VM → Snapshot → Take Snapshot opens the snapshot capture dialog."
+  width={600}
+/>
 
-Now swap the CD/DVD drive from the Windows installer to the course ISO. With the VM running:
+<Figure
+  src={snapshot2}
+  alt="VMware Take Snapshot dialog with fresh-install entered in the Name field"
+  caption="The Take Snapshot dialog with the snapshot named fresh-install."
+  width={400}
+/>
+
+If you ever need to roll the VM back to this state, navigate to **VM → Snapshot → Revert to Snapshot** from the same menu, or open **VM → Snapshot → Snapshot Manager** to see every snapshot on the VM and pick which one to restore.
+
+## Step 8: Attach `WF_A.iso` to the VM
+
+Now swap the CD/DVD drive from the Windows installer to **`WF_A.iso`**. With the VM running:
 
 1. From the VMware menu bar, choose **VM → Settings**.
 2. In the hardware list, select **CD/DVD (SATA)**.
-3. On the right, choose **Use ISO image file**, browse to the **course ISO**, and click **OK**.
+3. On the right, choose **Use ISO image file**, browse to **`WF_A.iso`**, and click **OK**.
 4. Make sure **Connected** and **Connect at power on** are both checked.
 5. Click **OK** to apply.
 
-Inside Windows, the ISO will appear as a new drive letter, usually `D:` or `E:`. Open File Explorer to confirm it. You should see `setup.ps1`, `verify-setup.ps1`, and a couple of folders.
+<Figure
+  src={isoA}
+  alt="VMware Virtual Machine Settings dialog showing the CD/DVD device pointing at WF_A.iso, with Connected and Connect at power on both checked"
+  caption="The VM Settings dialog with the CD/DVD device pointed at WF_A.iso and both Connected and Connect at power on checked."
+  width={800}
+/>
 
-## Step 9: Run `setup.ps1`
+Inside Windows, the ISO will appear as a new drive letter, usually `D:` or `E:`. Open File Explorer to confirm it. You should see `setup_a.ps1` and a couple of folders.
 
-`setup.ps1` does the heavy lifting: it configures the VM and installs everything the rest of the course needs. It takes 10 to 15 minutes.
+<Figure
+  src={isoA2}
+  alt="Windows File Explorer on the This PC view showing the WF_A DVD drive mounted as a new drive letter"
+  caption="Once the ISO is attached, WF_A appears as a new DVD drive in File Explorer's This PC view."
+  width={600}
+/>
+
+## Step 9: Run `setup_a.ps1`
+
+The `setup_a.ps1` script will configure the VM and install everything the rest of the course needs. It can take around 10 to 15 minutes, sometimes much longer, depending on network bandwidth.
 
 1. Click **Start**, type `PowerShell`, right-click **Windows PowerShell**, and choose **Run as administrator**.
 2. Confirm the User Account Control prompt. The window title should read **Administrator: Windows PowerShell**.
 3. Run the two commands below, replacing `D:` with whatever drive letter the course ISO mounted on:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-& 'D:\setup.ps1'
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+& 'D:\setup_a.ps1'
 ```
 
-The first command lets the script run in this shell session only<Cite id="set-execution-policy" />. It does not change any system-wide policy.
+The first command bypasses PowerShell's script-execution policy for the current process<Cite id="set-execution-policy" />, allowing the `setup_a.ps1` to run.
+
+<Figure
+  src={powershell1}
+  alt="Windows Start menu search results for PowerShell, with Windows PowerShell selected and a right-click context menu showing Run as administrator highlighted"
+  caption="Open the Start menu and start typing PowerShell, then right-click Windows PowerShell and choose Run as administrator."
+  width={600}
+/>
+
+Early on, the script will ask whether to **auto-fetch** the manual tools. Several tools are distributed outside the course ISO. The script attempts to download each one directly from the vendor's public CDN. If any downloads fail, the script will provide a reference list of the remaining tools that require manual installation.
 
 The script prints a header for each step and a green `[OK]` line for every item that succeeds. Stay on this terminal and watch it scroll. If anything fails, the script keeps going and lists the failures at the end, along with the path to the log file (`C:\Forensics\setup.log`).
 
-<Callout type="tip" title="The script is safe to re-run">
-  If you hit a transient error like a flaky download, fix the underlying issue (re-attach the ISO, reconnect the network, confirm you are running as Administrator) and re-run the same command. The script checks every step's state before acting, so it will only redo what is missing.
-</Callout>
+<Figure
+  src={setupA2}
+  alt="Administrator PowerShell window showing setup_a.ps1 mid-run, with cyan section headers and green [OK] lines streaming past"
+  caption="setup_a.ps1 partway through its run. The script logs each step as it works through the tool list."
+  width={800}
+/>
 
-When the script finishes, it prints a short checklist of any additional tools that need to be installed by hand. Those are covered in Step 10.
+**Note:** A few `[SKIP]` or `[FAIL]` lines throughout the run are normal. `setup_a.ps1` installs the full arsenal of tools used across the entire Windows forensics learning path and not every course uses every tool. If you care about a specific item or require it for a future lab, try re-running the script or alternatively fetch the tool by hand.
+
+When the script finishes, it prints a short checklist of any additional tools that need to be installed by hand. Those are covered in a later section.
 
 ## Step 10: Install the manual tools
 
-A handful of tools are free but their license terms forbid TCM from redistributing them on the course ISO. You will need to download and install each one yourself. Each is a short download and a default-options install.
+A handful of tools are free but their license terms forbid redistribution. Should you wish to use any of these additional tools, you will need to download and install each one yourself. Each is a short download and a default-options install. This list may grow over time as new tools are added to the Windows forensics learning path or vendors change what they redistribute.
+
+**Note:** Vendors can change download URLs, gate downloads behind new registration forms, ship new versions with different installers, pull tools entirely, or transfer them to a different company. If a link below 404s or a tool has been renamed or replaced, search the vendor's site for the current download or the successor tool.
+
+<Callout type="tip" title="Where to put the tools you install by hand">
+  For the sake of organization, whenever you install one of these tools manually, drop it under `C:\Forensics\Tools\<ToolName>\`.
+</Callout>
 
 ### FTK Imager
 
-From [Exterro](https://www.exterro.com/digital-forensics-software/ftk-imager)<Cite id="ftk-imager" />. Free download; an email registration is required. Run the installer with the default options.
+From [Exterro](https://www.exterro.com/digital-forensics-software/ftk-imager)<Cite id="ftk-imager" />. Free with email registration. Run the installer with the default options.
 
 ### Magnet Encrypted Disk Detector (EDD)
 
-From [Magnet Forensics](https://www.magnetforensics.com/resources/encrypted-disk-detector/)<Cite id="magnet-edd" />. Free with email registration. Default options.
+From [Magnet Forensics](https://www.magnetforensics.com/resources/encrypted-disk-detector/)<Cite id="magnet-edd" />. Free with email registration. Run the installer with the default options.
 
 ### Magnet DumpIt for Windows
 
-From [Magnet Forensics](https://www.magnetforensics.com/resources/magnet-dumpit-for-windows/)<Cite id="dumpit" />. Free with email registration. Default options.
+From [Magnet Forensics](https://www.magnetforensics.com/resources/magnet-dumpit-for-windows/)<Cite id="dumpit" />. Free with email registration. Run the installer with the default options.
 
-## Step 11: Run `verify-setup.ps1`
+### KAPE (Kroll Artifact Parser and Extractor)
 
-`verify-setup.ps1` does a read-only sweep to confirm everything the rest of the course needs is in place.
+From [Kroll](https://www.kroll.com/en/services/cyber-risk/incident-response-litigation-support/kroll-artifact-parser-extractor-kape)<Cite id="kape" />. Free with form submission.
 
-Back in the same elevated PowerShell:
+### Magnet RAM Capture
+
+From [Magnet Forensics](https://www.magnetforensics.com/resources/magnet-ram-capture/)<Cite id="magnet-ram-capture" />. Free with email registration. Run the installer with the default options.
+
+### Elcomsoft Encrypted Disk Hunter (EDH)
+
+From [Elcomsoft](https://www.elcomsoft.com/edh.html)<Cite id="edh" />. Free download via portable zip.
+
+### WiebeTech Write Block Validation Utility (WBVU)
+
+From [DigiStor](https://cdsg.com/products/usb-writeblocker)<Cite id="wbvu" />. Free download. Run the installer with the default options.
+
+### Sysinternals Suite
+
+From [Microsoft](https://learn.microsoft.com/en-us/sysinternals/downloads/sysinternals-suite)<Cite id="sysinternals" />. Free download via portable zip.
+
+### Arsenal Image Mounter
+
+From [Arsenal Recon](https://arsenalrecon.com/downloads)<Cite id="aim" />. AIM Free Mode covers the disk-mounting features. Default-options install.
+
+## Step 11: Take a `workstation-ready` snapshot
+
+Feel free to take a second VM snapshot now to capture your configured forensic workstation. This will save you the effort of having to re-acquire tooling and redo the workstation configuration should something go wrong during the course.
+
+1. Right-click the VM in your VMware library.
+2. Choose **Snapshot → Take Snapshot**.
+3. Name it `workstation-ready` and click **Take Snapshot**.
+
+<Figure
+  src={snapshot3}
+  alt="VMware Take Snapshot dialog with workstation-ready entered in the Name field"
+  caption="The Take Snapshot dialog with the snapshot named workstation-ready."
+  width={400}
+/>
+
+## Step 12: Attach `WF_B.iso` to the VM
+
+`WF_B.iso` is the course-specific ISO containing the course's exercises, artifacts, and electronic lab workbook. Attach it to the VM the same way you attached `WF_A.iso` in Step 8.
+
+1. From the VMware menu bar, choose **VM → Settings**.
+2. Select **CD/DVD (SATA)**.
+3. Choose **Use ISO image file**, browse to **`WF_B.iso`**, and click **OK**.
+4. Confirm **Connected** and **Connect at power on** are both checked.
+5. Click **OK** to apply.
+
+<Figure
+  src={isoB}
+  alt="VMware Virtual Machine Settings dialog showing the CD/DVD device pointing at WF_B.iso, with Connected and Connect at power on both checked"
+  caption="The VM Settings dialog with the CD/DVD device pointed at WF_B.iso."
+  width={800}
+/>
+
+Inside Windows, the drive letter will refresh to point at the new ISO. Open File Explorer and confirm you see `setup_b.ps1` on the new drive.
+
+<Figure
+  src={isoB2}
+  alt="Windows File Explorer on the This PC view showing the WF_B DVD drive mounted as a new drive letter."
+  caption="WF_B appears as a new DVD drive in File Explorer's This PC view. The drive letter may differ from the previous WF_A drive depending on how Windows unmounted and reassigned it."
+  width={600}
+/>
+
+## Step 13: Run `setup_b.ps1`
+
+This script stages the course files and the lab workbook on the VM.
+
+From the same elevated PowerShell as before (or a fresh one), run:
 
 ```powershell
-& 'D:\verify-setup.ps1'
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+& 'D:\setup_b.ps1'
 ```
 
-(Replace `D:` with your course ISO drive letter, same as in Step 9.)
+Replace `D:` with whatever drive letter `WF_B.iso` mounted on. It may take a few minutes for everything to complete.
 
-Every line should print `[OK]` in green. If anything prints `[MISSING]`, fix the underlying issue and re-run the verifier.
+When the script finishes, open the **Lab Workbook** shortcut on the desktop, or browse to `http://localhost:5173`. You should see this exact workbook running locally inside the VM. From here on, use the in-VM copy. It works offline, survives snapshot rollbacks, and tracks your checklist progress per-browser.
 
-## Step 12: Take a `course-ready` snapshot
+<Figure
+  src={workbook1}
+  alt="Windows desktop inside the VM with the Lab Workbook shortcut visible and a browser window showing the workbook at http://localhost:5173"
+  caption="The VM after setup_b.ps1 finishes. The Lab Workbook shortcut on the desktop opens the workbook in the browser at http://localhost:5173."
+  width={800}
+/>
 
-Once `verify-setup.ps1` reports all green, take a second snapshot. This is the state you will roll back to whenever a later lab leaves your VM in a state you cannot recover.
+<Callout type="tip" title="The workbook starts automatically at every logon">
+  The setup script registers a scheduled task that brings the workbook up at every logon, so you do not need to start it by hand after rebooting. If `localhost:5173` is not responding, open Task Scheduler, find the **TCMWorkbookDevServer** task, and run it manually.
+</Callout>
+
+## Step 14: Take a `course-ready` snapshot
+
+Take one final snapshot so you can roll back to a clean, fully-attached course state without rerunning either setup script.
+
+First, disconnect `WF_B.iso`: **VM → Settings → CD/DVD (SATA) → uncheck both Connected and Connect at power on**. Its contents are already on the VM, and unattaching it before the snapshot keeps the roll-back state clean.
+
+Then take the snapshot:
 
 1. Right-click the VM in your VMware library.
 2. Choose **Snapshot → Take Snapshot**.
 3. Name it `course-ready` and click **Take Snapshot**.
 
-You are done with Lab 1.1.
+<Figure
+  src={snapshot4}
+  alt="VMware Take Snapshot dialog with course-ready entered in the Name field"
+  caption="The Take Snapshot dialog with the snapshot named course-ready."
+  width={400}
+/>
+
+You are done with Lab 1.1. From here on, work inside the VM and continue using the electronic lab workbook.
 
 ## Troubleshooting
 
-### `setup.ps1` exits immediately with "could not find the course ISO"
+### The `setup_a.ps1` script exits immediately with "could not find the course ISO"
 
-The script walks every drive letter looking for the marker file `tcm-windows-forensics.marker` on its root. If it cannot find one, the ISO is not attached, or it is attached but not "connected."
+The ISO is likely not attached, corrupt, or it is attached but not "connected."
 
 1. From the VMware menu bar, choose **VM → Settings → CD/DVD (SATA)** and confirm:
    - The ISO image path points at your course ISO.
    - **Connected** is checked.
    - **Connect at power on** is checked.
-2. In File Explorer inside the VM, confirm you see a new drive letter with `setup.ps1` on it.
+2. In File Explorer inside the VM, confirm you see a new drive letter with `setup_a.ps1` on it.
 3. Re-run the script.
 
 ### PowerShell complains "the script is not digitally signed"
 
-You forgot the first line in Step 9. Run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` in the same PowerShell window<Cite id="set-execution-policy" /> and re-run the setup command. The bypass only applies to that one shell session and is dropped when you close it.
+You forgot the first line in Step 9. Run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force` in the same PowerShell window<Cite id="set-execution-policy" /> and re-run the setup command. The bypass only applies to that one shell session and is dropped when you close it.
 
 ### "VMware Workstation and Device/Credential Guard are not compatible"
 
@@ -311,18 +533,20 @@ Windows 10 and 11 sometimes throttle VMware's main process under power managemen
 powercfg /powerthrottling disable /path "C:\Program Files (x86)\VMware\VMware Workstation\x64\vmware-vmx.exe"
 ```
 
-Reboot the host after running it. The path above assumes a default install location; adjust it if you installed VMware somewhere else.
-
-### Drag and drop or shared folders do not work between the host and the VM
-
-These features are provided by VMware Tools. If they are not working, either VMware Tools is not installed (re-run Step 6) or the **Shared Folders** option is not enabled. Power the VM off, open its settings in VMware, enable Shared Folders, and power the VM back on.
+Reboot the host after running it. The path above assumes a default install location, so ensure to adjust it if you installed VMware somewhere else.
 
 ### The lab workbook is not loading at `http://localhost:5173`
 
-Setup registers a scheduled task that starts the workbook dev server at logon. The task does not run until you sign out and back in for the first time. Either sign out / sign in, or open a regular (not elevated) PowerShell and run:
+The workbook dev server is started by **`setup_b.ps1`**. If `localhost:5173` is not responding:
+
+1. Confirm `setup_b.ps1` finished without listing any failures. If `npm install` failed mid-run, re-run the script.
+2. Wait 20-30 seconds after the script completes. Vite needs a moment to bind the port the first time.
+3. Open Task Scheduler and confirm the **TCMWorkbookDevServer** task exists and ran. Right-click it and choose **Run** if it has not started.
+
+If none of that helps, open a regular (not elevated) PowerShell and run the server by hand:
 
 ```powershell
-cd C:\Forensics\Workbook
+cd "C:\Forensics\Workbook\Introduction to Windows Forensics"
 npm run dev
 ```
 
@@ -330,21 +554,24 @@ Leave that terminal open and refresh `http://localhost:5173` in your browser.
 
 ## Verification checklist
 
-Run through this checklist before starting Lab 2.1. Each item is saved in your browser as you tick it, and most of them are covered automatically by `verify-setup.ps1`.
+Run through this checklist before starting Lab 2.1.
 
 <Checklist id="lab-1-1-verify" title="You are ready to start the labs when you can check every box">
   <Check id="hypervisor">I have VMware Workstation Pro, Fusion Pro, or VirtualBox installed on my host.</Check>
   <Check id="win11-iso">I have downloaded the Windows 11 Enterprise Evaluation ISO.</Check>
-  <Check id="course-iso">I have downloaded the course ISO from the TCM Security Academy portal.</Check>
-  <Check id="vm-built">I have built a Windows 11 VM with 100 GB disk, 8 GB RAM, and 4 vCPU.</Check>
+  <Check id="course-isos">I have downloaded and extracted both `WF_A.iso` and `WF_B.iso` from the TCM Security Academy portal.</Check>
+  <Check id="vm-built">I have built a Windows 11 VM with at least the recommended specifications.</Check>
   <Check id="windows-installed">I have installed Windows 11, used a local account, and turned off every privacy toggle.</Check>
   <Check id="vmware-tools">I have installed VMware Tools and the VM window resizes cleanly.</Check>
   <Check id="snap-fresh">I have taken a `fresh-install` snapshot.</Check>
-  <Check id="iso-attached">I have attached the course ISO to the VM's CD/DVD drive and confirmed it appears as a drive letter in Windows.</Check>
-  <Check id="setup-ran">I have run `setup.ps1` from an elevated PowerShell and it finished without listing any failures.</Check>
-  <Check id="manual-tools">I have installed FTK Imager, Magnet EDD, and Magnet DumpIt by hand.</Check>
-  <Check id="verify-green">I have run `verify-setup.ps1` and every line is green.</Check>
-  <Check id="snap-ready">I have taken a `course-ready` snapshot.</Check>
+  <Check id="iso-a-attached">I have attached `WF_A.iso` to the VM's CD/DVD drive and confirmed it appears as a drive letter in Windows.</Check>
+  <Check id="setup-a-ran">I have run `setup_a.ps1` from an elevated PowerShell and it finished without listing any failures.</Check>
+  <Check id="manual-tools">I have installed any additional required tools by hand.</Check>
+  <Check id="snap-ready">I have taken a `workstation-ready` snapshot.</Check>
+  <Check id="iso-b-attached">I have attached `WF_B.iso` to the CD/DVD drive and confirmed `setup_b.ps1` is visible in File Explorer.</Check>
+  <Check id="setup-b-ran">I have run `setup_b.ps1` from an elevated PowerShell and it finished without listing any failures.</Check>
+  <Check id="workbook-loads">I can open the **Lab Workbook** desktop shortcut and see the workbook at `http://localhost:5173` inside the VM.</Check>
+  <Check id="snap-course-ready">I have taken a `course-ready` snapshot.</Check>
 </Checklist>
 
 Once every box is ticked you are ready to move on to Module 2.

@@ -146,6 +146,13 @@ export function WorkbookToc({
       el.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
     setActiveId(id)
+    // Reflect the current section in the URL so refreshing the page
+    // lands the reader back at the same heading. `replaceState` is used
+    // instead of `pushState` so clicking through many TOC items doesn't
+    // pile up history entries the back button has to walk through.
+    const url = new URL(window.location.href)
+    url.hash = id
+    window.history.replaceState(null, '', url.toString())
   }
 
   if (items.length === 0) return null

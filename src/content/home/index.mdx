@@ -55,15 +55,16 @@ A **Reset all answers** button at the bottom of any lab page lets you wipe your 
 
 The lab workbook is distributed as a **Git repository**, and new labs, corrections, and content updates land on the `main` branch over time. The build hash in the footer of every page identifies the revision you are currently running, so you can check at a glance whether your local copy is behind.
 
-To pull the latest content, open a terminal in the lab workbook directory and run:
+To pull the latest content, open a terminal and run:
 
 ```bash
+cd "C:\Forensics\Workbook\Introduction to Windows Forensics"
 git pull
 npm install
 npm run dev
 ```
 
-The first command fetches the newest commits. The second installs any new dependencies that were added since your last pull. The third restarts the local development server so the updated content is served in your browser.
+`git pull` fetches the newest commits, `npm install` picks up any new dependencies, and `npm run dev` restarts the local development server so the updated content is served in your browser.
 
 <Callout type="tip" title="Saving progress">
   Your answers, notes, and lab progress are stored in your browser's **local storage**, not in the repository itself. Pulling new commits will not erase work you have already done.

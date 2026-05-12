@@ -398,6 +398,110 @@
   }
 }
 
+/* Print styles. The app's normal layout uses a fixed-height viewport
+   (`html`/`body`/`#root` are `height: 100%` + `overflow: hidden`) so the
+   top nav can stay pinned while a child scroller handles the lab body.
+   That layout actively hostile to `Ctrl+P`: the browser captures only
+   the viewport-sized window of the scroller. Undo it for print: release
+   every height/overflow constraint up the chain, drop the global 125%
+   zoom, and let chrome elements opt out by adding `print:hidden`. */
+@media print {
+  html,
+  body,
+  #root {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  html {
+    /* The screen layout bumps the root to 125% for comfortable on-screen
+       reading. Paper is the opposite problem (we want to fit more per
+       page), so reset to the browser default. */
+    font-size: 100%;
+  }
+
+  /* Force light-mode palette for print regardless of the current `dark`
+     class on `<html>`. Page-chrome surface tokens are flattened to pure
+     white so the body, header card, and table rows print on a clean
+     white sheet. Code-block snippet tokens KEEP their subtle blue-grey
+     tint so code is still visually distinct from prose on paper. */
+  html,
+  html.dark {
+    --forensic-bg: 255 255 255;
+    --forensic-surface: 255 255 255;
+    --forensic-surfaceAlt: 255 255 255;
+    --forensic-border: 231 229 228;
+    --forensic-borderBright: 214 211 209;
+    --forensic-text: 28 25 23;
+    --forensic-textMuted: 87 83 78;
+    --forensic-textDim: 168 162 158;
+    --forensic-primary: 232 36 89;
+    --forensic-primarySoft: 254 242 244;
+    --forensic-snippetBg: 246 248 250;
+    --forensic-snippetHeader: 234 238 242;
+    --forensic-snippetBorder: 208 215 222;
+    --forensic-snippetText: 31 35 40;
+    --forensic-snippetMuted: 101 109 118;
+  }
+
+  /* Override the body and the two app-shell wrappers that paint their
+     own forensic-bg background. Even with the variables forced to white
+     above, we set background:white explicitly so renderers that strip
+     CSS-variable backgrounds in print still end up on a white sheet. */
+  html,
+  body,
+  #root,
+  body > div {
+    background: white !important;
+    background-image: none !important;
+  }
+  body {
+    color: black !important;
+  }
+
+  /* Belt-and-braces. Some browsers (and printer drivers) don't
+     re-compute element backgrounds when a CSS variable changes inside
+     `@media print` - the box keeps painting whatever the variable
+     resolved to during screen layout. Hard-code white on every Tailwind
+     utility that touches a page-chrome surface token so the header
+     card, hex views, question cards, definition cards, callout wraps,
+     and table rows print on a clean white sheet. Substring matchers
+     catch alpha-modifier variants like `bg-forensic-surfaceAlt/50`.
+     `bg-forensic-snippet*` and `bg-forensic-primarySoft` are
+     deliberately NOT in this list - code blocks keep their blue-grey
+     tint and "Key takeaway" callouts keep their pale-pink tint so they
+     read as distinct on paper, consistent with how the other callout
+     types (note=blue, tip=emerald, warning=amber) print. */
+  [class*="bg-forensic-bg"],
+  [class*="bg-forensic-surface"] {
+    background-color: white !important;
+    background-image: none !important;
+  }
+
+  /* Tell the print engine to render backgrounds (callouts, code-block
+     surfaces, badges) instead of stripping them. Without this Chrome
+     and Edge will print colored UI elements as plain text on white. */
+  * {
+    -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+  }
+
+  /* Keep self-contained blocks from getting torn across page breaks,
+     and avoid orphaned headings stranded at the bottom of a page. */
+  pre,
+  figure,
+  table,
+  blockquote {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  h1, h2, h3, h4 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+}
+
 /* Radix animation utilities */
 @layer utilities {
   @keyframes slide-in-from-right {
