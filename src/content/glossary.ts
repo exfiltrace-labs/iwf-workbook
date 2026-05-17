@@ -69,6 +69,28 @@ export const GLOSSARY: GlossaryEntry[] = [
       'A bit-for-bit copy of a storage device or memory, captured in a way that preserves the original data exactly. Analysts work from the image so the source evidence stays untouched.',
   },
   {
+    term: 'order of volatility',
+    definition:
+      'The principle that during evidence collection you proceed from the most volatile data (CPU registers, RAM) to the least (archival media). Memory is captured before disk because power loss destroys it.',
+  },
+  {
+    term: 'kernel driver',
+    aliases: ['kernel-mode driver', 'kernel mode driver', 'device driver'],
+    definition:
+      'A privileged piece of code that runs in kernel mode alongside the operating system itself. Only kernel-mode code can address physical memory directly, which is why memory acquisition tools must install one.',
+  },
+  {
+    term: 'NTP',
+    aliases: ['Network Time Protocol'],
+    definition:
+      '**Network Time Protocol**: the standard for keeping system clocks synchronized to authoritative time sources. Forensic timestamps recorded against an NTP-synced clock are defensible. Timestamps from a drifted clock are not.',
+  },
+  {
+    term: 'MACB',
+    definition:
+      'The four NTFS timestamps maintained for every file: **M**odified (last data write), **A**ccessed (last read), **C**hanged (metadata changed), and **B**irth (file created). Used in timeline analysis to reconstruct file activity.',
+  },
+  {
     term: 'NullMRU',
     definition:
       'This is a **placeholder term** used by the lab workbook to show how glossary tooltips work. It is not a real forensic artifact!',

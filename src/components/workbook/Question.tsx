@@ -385,7 +385,7 @@ export function Question({
             Hide solution
           </button>
         </header>
-        <div className="px-5 py-4 [&>:first-child]:!mt-0 [&>:last-child]:!mb-0">
+        <div className="prose prose-sm max-w-none px-5 py-4 [&>:first-child]:!mt-0 [&>:last-child]:!mb-0">
           {slots.solution}
         </div>
       </section>
