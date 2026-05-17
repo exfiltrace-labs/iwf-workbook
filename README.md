@@ -9,8 +9,8 @@ locally alongside the lessons.
 Requirements: **Node.js 18 or newer** and a recent npm.
 
 ```bash
-git clone <repo-url>
-cd lab_workbook
+git clone https://github.com/exfiltrace-labs/iwf-workbook.git
+cd iwf-workbook
 npm install
 npm run dev
 ```
@@ -32,7 +32,7 @@ fixes the same way you would any other project:
 
 ```bash
 git pull
-npm install   # only when package.json has changed
+npm install
 ```
 
 The build hash shown in the footer of every workbook page comes from
@@ -51,4 +51,4 @@ means:
 - The "Reset all questions" button at the bottom of a workbook page
   clears persisted answers for that lab only.
 
-Nothing is uploaded anywhere. The app has no backend.
+The app has no external backend and does not require an internet connection.
