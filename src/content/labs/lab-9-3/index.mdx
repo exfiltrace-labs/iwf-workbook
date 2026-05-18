@@ -4,9 +4,342 @@ moduleId: module-9
 labNumber: Lab 9.3
 title: Acquiring a Forensic Image
 order: 3
-readTime: 25 minutes
+readTime: 40 minutes
 difficulty: beginner
-description: Use FTK Imager to create a verified forensic image of a sample disk, end to end.
+description: Image a small prepared source disk with FTK Imager, verify the image's hashes against the source, and document the acquisition end to end.
+references:
+  - id: ftk-imager
+    label: FTK Imager
+    url: https://www.exterro.com/digital-forensics-software/ftk-imager
+    detail: Exterro
+  - id: vhdx
+    label: Manage virtual hard disks
+    url: https://learn.microsoft.com/en-us/windows-server/storage/disk-management/manage-virtual-hard-disks
+    detail: Microsoft Learn
+  - id: get-filehash
+    label: Get-FileHash cmdlet reference
+    url: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/get-filehash
+    detail: Microsoft Learn
+  - id: ewf
+    label: Expert Witness Format (EWF/E01)
+    url: https://en.wikipedia.org/wiki/EnCase
+    detail: Wikipedia
 ---
 
-Placeholder lab.
+import installWizard from './images/install_wizard.png'
+import ftkVersion from './images/ftk_version.png'
+import selectSource from './images/select_source.png'
+import imageType from './images/image_type.png'
+import verifyResults from './images/verify_results.png'
+import hashVerify from './images/hash_verify.png'
+import evidenceTree from './images/evidence_tree.png'
+
+## Background
+
+Once memory has been preserved and the encryption picture is settled, the next step in a live acquisition is the disk. The image you produce here is the bedrock evidence for everything that follows. File recovery, registry analysis, timeline reconstruction, and every analytical question you'll ever ask about this system will be answered against this image, not against the live machine. The discipline is to produce an image that is provably a bit-for-bit copy of the source, hashed and verified, with case metadata that travels along with the raw bytes.
+
+In this lab you'll prepare a small source disk on your workstation, image it with **FTK Imager**<Cite id="ftk-imager" />, verify the image's integrity, and write the kind of acquisition record a real engagement requires.
+
+## Objectives
+
+By the end of this lab you should be able to:
+
+- Create a forensic image of a live volume using FTK Imager.
+- Choose an appropriate image format and understand the trade-offs.
+- Verify image integrity through hash comparison.
+- Document an acquisition with the level of detail a real engagement requires.
+
+## Setup: Prepare a source disk
+
+In a real engagement the source disk would be the suspect's. For this lab, capturing an image of your VM's main disk would take a long time and use up most of the free space on the host. Instead, you'll mount a small NTFS volume backed by a virtual hard disk file (a `.vhdx`<Cite id="vhdx" />), populate it with a handful of sample files, and image that.
+
+From an **elevated** PowerShell session, drop the execution policy and run the `prep.ps1` script from the `Exercises` directory:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+C:\Forensics\Exercises\iwf\Disk_Imaging\prep.ps1
+```
+
+The script creates a 500 MB virtual hard disk file, attaches it as drive `F:`, formats it NTFS with the label `Source`, and writes a small folder tree under `Documents\`, `Downloads\`, and `Pictures\`. When it finishes, it prints a summary line with the mount point, the VHDX path, and a file count.
+
+<Figure
+  src="https://placehold.co/900x320?text=prep.ps1+success+output"
+  alt="Elevated PowerShell window showing prep.ps1 completing with the F: drive mounted, sample files written, and a summary line listing file count and total bytes"
+  caption="prep.ps1 finishing successfully. The summary at the bottom confirms the source volume is mounted at F: with the sample files written."
+  width={800}
+/>
+
+**Note:** If `F:` is already in use, the script will tell you and exit without touching anything. If a prior run of this lab is still mounted, re-run the same command with `-Cleanup` appended to tear it down. If something unrelated is mounted at `F:`, either free that letter or edit the script to point at any other unused letter.
+
+## Step 1: Locate FTK Imager
+
+On a real engagement, you'd introduce your acquisition tools into the environment from outside the suspect machine. The typical approach is a clean, prepared external drive that holds your portable acquisition tools and enough free space to hold the output image. You connect the drive to the suspect, run the tool from the drive, and write the output back to the drive.
+
+For the sake of this lab, you'll skip the external drive and run FTK Imager straight from the same VM you're imaging.
+
+First, we need to install **FTK Imager**<Cite id="ftk-imager" />. The installer is staged in the tools folder under `C:\Forensics\Tools\FTKImager\`. Confirm it's there:
+
+```powershell
+Get-ChildItem 'C:\Forensics\Tools\FTKImager\'
+```
+
+You should see an `Exterro_FTK_Imager_(x64)-*.exe` file. Make a note of its full path - you'll run it in the next step. If it's missing, you can grab the installer directly from [Exterro's FTK Imager page](https://www.exterro.com/digital-forensics-software/ftk-imager).
+
+FTK Imager is a free, GUI-based disk-imaging tool from Exterro (originally AccessData) that produces forensic images in multiple formats. Whether that GUI footprint matters depends on the acquisition type. In a traditional **dead acquisition** scenario, the drive is write-blocked and read on your examiner's workstation, so the imaging tool's footprint lands on your box, not the suspect's. A feature-rich GUI like FTK Imager is the natural choice.
+
+In a **live acquisition** scenario, the tool runs on the suspect itself, typically because encryption forces a live logical image. The same footprint pressure that pushes memory acquisition toward small CLI tools still applies, though less acutely since the volatile evidence is already captured. Smaller CLI alternatives like `dc3dd` or `ewfacquire` are worth considering when footprint matters.
+
+<Callout type="warning" title="Note">
+  In this lab you image a volume on the same Windows machine you are sitting at and write the output image to that machine's local disk. On a real engagement, you'd want the imaging tool and the captured image to live on external media. We are taking the shortcut here for the sake of demonstration and reproducibility.
+</Callout>
+
+## Step 2: Install FTK Imager
+
+Double-click the installer to run it. The install wizard appears. Click **Next**, accept the license agreement, set the **Destination Folder** to `C:\Forensics\Tools\`, and click **Install**.
+
+<Figure
+  src={installWizard}
+  alt="FTK Imager InstallShield Wizard welcome screen titled 'Welcome to the InstallShield Wizard for Exterro FTK Imager' with Back, Next, and Cancel buttons"
+  caption="The FTK Imager InstallShield wizard opens on a Welcome screen. Click Next to begin working through the install."
+  width={600}
+/>
+
+The wizard finishes in a few seconds and drops FTK Imager at `C:\Forensics\Tools\FTK Imager\FTK Imager.exe`. Close the wizard when it offers to launch FTK Imager as we'll come back to launching it after setting up our case notes.
+
+## Step 3: Pre-acquisition case notes
+
+Before you launch FTK Imager, open Notepad and save a new file as `C:\Forensics\Exercises\iwf\Disk_Imaging\case_notes.txt`. Pre-populate it with the fields you'll fill in as you work:
+
+```
+Case ID:
+Examiner:
+Workstation:
+Start time:
+Source path:
+Tool:
+Tool version:
+Image format:
+Image path:
+Image MD5:
+Image SHA-1:
+Image size (bytes):
+End time:
+Duration:
+Verification:
+```
+
+Fill in the static fields now: a case identifier you make up for this lab (something like `LAB-9-3-001`), the examiner's name, the workstation's hostname, the source path (`F:\`), and the tool name (`FTK Imager`). You'll capture the tool version from FTK Imager's **Help → About** dialog after you launch it.
+
+Record the **current date and time** under `Start time:` from a reference clock you trust (your phone, your watch, anything that is not the suspect machine). Leave the file open and append to it as you go.
+
+<Callout type="warning" title="Note">
+  Just as we are running the acquisition tool from the suspect itself for the sake of this lab, we are also documenting our case notes on the suspect. On a real engagement, your case notes would live outside of the system you are imaging. We are using Notepad here purely as a stand-in to keep the lab self-contained.
+</Callout>
+
+## Step 4: Launch FTK Imager and start the image wizard
+
+Right-click `C:\Forensics\Tools\FTK Imager\FTK Imager.exe` and choose **Run as administrator**.
+
+Open **Help → About FTK Imager** and read off the version number. Record it under `Tool version:` in `case_notes.txt`.
+
+<Figure
+  src={ftkVersion}
+  alt="About FTK Imager dialog showing Exterro FTK Imager version 4.7.3.81 with Copyright 2024 Exterro and License Agreement, Acknowledgements, and OK buttons"
+  caption="The About FTK Imager dialog. Record the version string under Tool version in your case notes."
+  width={450}
+/>
+
+From the main window choose **File → Create Disk Image**. A dialog opens asking what kind of source you want to image:
+
+<Figure
+  src={selectSource}
+  alt="FTK Imager Select Source dialog with radio buttons for Physical Drive, Logical Drive (selected and outlined in red), Image File, Contents of a Folder, and Fernico Device, plus Back/Next/Cancel/Help buttons"
+  caption="FTK Imager's Select Source dialog. The source-type choice determines what kind of evidence FTK Imager will read from."
+  width={600}
+/>
+
+The choices are:
+
+- **Physical Drive** captures the entire raw block device, including partition tables and unallocated space between partitions. This is what you use when you want the most faithful representation of the suspect's disk.
+- **Logical Drive** captures a single mounted volume. You get the file system and everything inside it (including unallocated space within the volume), but not other partitions on the same physical disk and not the partition table.
+- **Image File** re-images an existing image, useful for format conversion or sub-imaging.
+- **Contents of a Folder** is a file-level acquisition that produces a logical evidence file, not a volume image.
+- **Fernico Device** is for the Fernico FAR system, a specialized backup-tape style appliance.
+
+For this lab you're imaging the `F:` volume, so choose **Logical Drive** and click **Next**. Pick `F:\ [Source]` from the dropdown and click **Finish**. FTK Imager confirms the source on the next screen.
+
+<Callout type="tip" title="Encrypted systems: prefer Logical Drive">
+  When you're imaging an encrypted system, it's generally recommended to go with a **live logical image** wherever possible. A logical image reads through the operating system's decrypted view while the keys are still in RAM, so what lands on your evidence drive is data you can actually analyze.
+</Callout>
+
+## Step 5: Configure the destination
+
+In the next window, FTK Imager presents the Create Image dialog with your selected source listed at the top and an empty Image Destination(s) list below it. Click **Add** to add an image destination. The format dialog appears.
+
+<Figure
+  src={imageType}
+  alt="Left: FTK Imager Create Image dialog with the F:\ source listed, an empty Image Destination(s) list, and the Add button highlighted. Right: Select Image Type dialog with Raw (dd), SMART, E01 (selected and outlined in red), and AFF radio buttons."
+  caption="Clicking Add in the Create Image dialog opens the Select Image Type dialog. Choose E01, the standard forensic format that embeds case metadata and computes integrity hashes inline."
+  width={900}
+/>
+
+Choose **E01** and click **Next**. The case metadata screen appears. Fill in the optional but important information:
+
+- **Case Number**: `LAB-9-3-001` (or whatever identifier you're using)
+- **Evidence Number**: `EV-001`
+- **Unique Description**: `Lab acquisition - prepared source disk`
+- **Examiner**: Your Name
+- **Notes**: `Imaging the prepared F: volume`
+
+The **E01** format is the preferred pick over a raw `dd` image in most cases, because it embeds case metadata, supports compression and segmenting, and computes integrity hashes inline. This metadata gets embedded inside the resulting E01 file and travels with the image forever. Anyone who opens it in any EWF<Cite id="ewf" />-aware tool later will see these fields.
+
+Click **Next** to reach the destination screen and fill it in:
+
+- **Image Destination Folder**: `C:\Forensics\Exercises\iwf\Disk_Imaging\image` (make a new sub-folder)
+- **Image Filename**: `EV-001`
+- **Image Fragment Size (MB)**: leave at the default `1500`. This controls how large each `.E01` segment is before the image spills into `.E02`, `.E03`, and so on. A 500 MB source easily fits in a single segment.
+- **Compression**: leave at the default `6`. Higher compression saves disk space at the cost of acquisition speed.
+- **Use AD Encryption**: leave unchecked.
+
+Click **Finish**. You'll be back on the main Create Image dialog with the destination listed.
+
+## Step 6: Starting the acquisition
+
+Before you click **Start**, confirm two checkboxes at the bottom of the Create Image dialog:
+
+- **Verify images after they are created** - this triggers the very important post-acquisition hash comparison.
+- **Precalculate Progress Statistics** - optional, gives you an ETA during acquisition.
+
+<Figure
+  src={verifyResults}
+  alt="FTK Imager Create Image dialog with the F:\ source listed, the EV-001 [E01] destination path filled in, Verify images after they are created checked, and the Start button highlighted in red"
+  caption="The Create Image dialog right before clicking Start. The destination is set, Verify images after they are created is checked, and Start is ready to go."
+  width={500}
+/>
+
+Click **Start**. A progress window appears showing source size, elapsed time, estimated time remaining, and current operation. For a 500 MB source on a local SSD the acquisition phase finishes in well under a minute. FTK Imager then automatically moves into the verification phase, re-reads the image it just wrote, recomputes its hashes, and compares them against the hashes it computed from the source during the write.
+
+Don't touch the system while it runs. When acquisition finishes and verification begins, FTK Imager will print "Verifying" in the progress dialog. Wait for it to complete before moving on.
+
+## Step 7: Verify the hashes
+
+When verification completes, a results window will appear with the resulting stored and computed hash values, integrity checks, and a verdict:
+
+<Figure
+  src={hashVerify}
+  alt="Left: FTK Imager Creating Image dialog showing Status 'Image created successfully' with the Image Summary button highlighted. Right: Drive/Image Verify Results dialog showing MD5 and SHA1 sections with matching Computed, Stored verification, and Report hashes, Verify result reading Match for both, and no bad blocks found in the image."
+  caption="Left: the Creating Image dialog reports Image created successfully. Right: the Drive/Image Verify Results dialog shows the MD5 and SHA1 hashes lining up exactly, with Verify result reading Match for both algorithms."
+  width={900}
+/>
+
+FTK Imager computes both **MD5** and **SHA-1** for an E01 acquisition by default. Each algorithm has its own section in the dialog with three values: the **Computed hash** (over the bytes read from the source during the write), the **Stored verification hash** (the value baked into the E01), and the **Report hash** (over the bytes read back from the image during the verification pass). All three should match, and the **Verify result** row at the bottom of each section confirms it with a `Match`. That means the bytes that were written to the E01 are bit-identical to the bytes that were read from the source.
+
+Before closing the Creating Image dialog, click **Image Summary...** to see the full acquisition report. This report contains the case metadata, source geometry, MD5 and SHA-1 hashes, acquisition and verification timestamps, and the verification verdict. A copy of the same report is also written next to the E01 as a `.txt` file with the same base name (`EV-001.txt`), so the record is preserved on disk even if you close the dialog.
+
+Copy both hash values into `case_notes.txt` under `Image MD5:` and `Image SHA-1:`. Record the end time under `End time:` from your reference clock and compute the duration.
+
+<Callout type="warning" title="A mismatch is a stop condition">
+  If the source and image hashes do not match, the image is not forensically sound. The correct response is to **stop**, document the mismatch (which hashes, which values, what FTK Imager reported), investigate the cause, and re-acquire. Do not analyze a mismatched image (but hold onto it for documentation and failure analysis).
+</Callout>
+
+## Step 8: Mount the image and confirm content
+
+A hash match means the image is a faithful copy of what FTK Imager read off the source. It's still worth opening the image to confirm you imaged the right thing. In the FTK Imager main window choose **File → Add Evidence Item**, choose **Image File**, and browse to `C:\Forensics\Exercises\iwf\Disk_Imaging\image\EV-001.E01`. Click **Finish**.
+
+The left-hand Evidence Tree now shows the image as a new root. Expand it to find the `Source` volume, then drill into `Documents\`, `Downloads\`, and `Pictures\`. You should see the same sample files the prep script wrote. Click one of them to see its content rendered in the preview pane.
+
+<Figure
+  src={evidenceTree}
+  alt="FTK Imager main window with the mounted EV-001.E01 expanded in the Evidence Tree under Source [NTFS]. The Documents folder is selected, the File List on the right shows budget_q3.txt, contacts.csv, meeting_minutes.txt, and notes.txt, and the preview pane below renders the notes.txt contents."
+  caption="The mounted E01 in FTK Imager. The Documents folder lists the same sample files the prep script wrote, and the preview pane renders its contents directly out of the image."
+  width={900}
+/>
+
+The integrity check already confirmed the resulting copy is forensically sound, and seeing the expected files inside confirms it was acquired from the right source.
+
+## Step 9: Final case notes
+
+Open `case_notes.txt` and confirm it has all of the following recorded:
+
+- Case ID and evidence number
+- Examiner and workstation
+- Tool name and version
+- Source path
+- Image path, image format, image MD5 and SHA-1, image size in bytes
+- Start time, end time, and elapsed duration
+- Verification result (match or mismatch)
+
+To capture the image size in bytes from the command line, point `Get-Item` at the E01:
+
+```powershell
+(Get-Item C:\Forensics\Exercises\iwf\Disk_Imaging\image\EV-001.E01).Length
+```
+
+Save the file. This is your acquisition record alongside any screenshots of the FTK Imager verification dialog.
+
+## Questions
+
+<Question id="lab-9-3-q1" label="Q1" type="text" accept="Logical Drive, logical drive, Logical">
+  Which source type did you select in FTK Imager's Create Disk Image wizard?
+
+  <Hint>FTK Imager listed five source-type choices on the first wizard screen. You picked the one that captures a single mounted volume.</Hint>
+  <Solution>**Logical Drive**. Logical Drive captures the file system inside a single mounted volume, which fits this lab because `F:` is the volume we wanted to image. Physical Drive captures the entire raw block device including partition tables, which is what you would choose on a real engagement against a full disk.</Solution>
+</Question>
+
+<Question id="lab-9-3-q2" label="Q2" type="text" accept="E01, EWF, Expert Witness Format">
+  Which image format did you write the source out to?
+
+  <Hint>It's the format FTK Imager defaults to in the image-type dialog, and the one that ships with embedded case metadata.</Hint>
+  <Solution>**E01** (also known as the Expert Witness Format, or EWF). E01 embeds case metadata, supports segmenting and compression, and computes hashes inline as part of the format.</Solution>
+</Question>
+
+<Question id="lab-9-3-q3" label="Q3" type="text" accept="SHA-1, SHA1, SHA 1, sha-1, sha1, sha 1">
+  Besides MD5, what other hash algorithm does FTK Imager compute and verify on an E01 by default?
+
+  <Hint>It's a 160-bit algorithm that produces a 40-character hex string. You can see it in the Drive/Image Verify Results dialog right under the MD5 section.</Hint>
+  <Solution>**SHA-1**. FTK Imager computes both MD5 and SHA-1 by default for an E01 acquisition. SHA-1 is 160-bit, producing a 40-character hex string. Some FTK Imager versions also support SHA-256 if you enable it explicitly.</Solution>
+</Question>
+
+<Question id="lab-9-3-q4" label="Q4" type="text">
+  Paste the **MD5** hash that FTK Imager reported for your image.
+
+  <Hint>You recorded this in your case notes under `Image MD5:`. It's the 32-character hex string from the MD5 section of the Verify Results dialog.</Hint>
+  <Solution>Specific to your run. MD5 is 32 hex characters. The Computed hash, Stored verification hash, and Report hash should all be identical, and Verify result should read `Match`.</Solution>
+</Question>
+
+<Question id="lab-9-3-q5" label="Q5" type="text">
+  Paste the **SHA-1** hash that FTK Imager reported for your image.
+
+  <Hint>You recorded this in your case notes under `Image SHA-1:`. It's the 40-character hex string from the SHA1 section of the Verify Results dialog.</Hint>
+  <Solution>Specific to your run. SHA-1 is 40 hex characters. The Computed hash, Stored verification hash, and Report hash should all be identical, and Verify result should read `Match`.</Solution>
+</Question>
+
+<Question id="lab-9-3-q6" label="Q6" type="text">
+  What is the size of your E01 image, in bytes?
+
+  <Hint>`(Get-Item path-to-E01).Length` returns the size in bytes.</Hint>
+  <Solution>Specific to your run. With compression level 6, an E01 image of a mostly-empty 500 MB NTFS volume is typically a smaller fraction of the source size, since most of the volume is zeros that compress aggressively.</Solution>
+</Question>
+
+<Question id="lab-9-3-q7" label="Q7" type="text" accept="$89.09, 89.09, $89, 89, 89 dollars, $89 dollars, 89.09 dollars, $89.09 dollars">
+  Mount your E01 in FTK Imager and find the receipt file inside. What was the total amount on it?
+
+  <Hint>Use **File → Add Evidence Item → Image File** to load the E01, then explore the `Source` volume's folders to track down a file that looks like a receipt. Click it to see its content in the preview pane.</Hint>
+  <Solution>**$89.09** - the Total line at the bottom of the receipt (subtotal $82.49 plus 8% tax of $6.60). The point of this question is to confirm you can actually read content out of the E01 you just produced.</Solution>
+</Question>
+
+## Wrapping Up
+
+You just produced a verified forensic image: a hash-matched, metadata-embedded E01 of a known source, with an acquisition record that names the case, the examiner, the tool, the source, the destination, the hashes, the times, and the verification result. Every real disk acquisition follows the same workflow you just walked through. Real cases have bigger sources and longer runtimes, but the underlying workflow remains consistent.
+
+FTK Imager isn't the only tool that does this. **X-Ways Forensics**, **Belkasoft Acquisition Tool**, and **Magnet ACQUIRE** are all examples of similar tools that produce E01 images with comparable verification. On the CLI, **dd** and **dc3dd** can produce raw images. The discipline is the same regardless of tool: read the source bit for bit, hash what you wrote, verify it matches what you read, and document the process.
+
+### Cleanup
+
+When you're finished with the lab, run the prep script with `-Cleanup` to detach the source volume and delete the underlying VHDX:
+
+```powershell
+C:\Forensics\Exercises\iwf\Disk_Imaging\prep.ps1 -Cleanup
+```
+
+Drive `F:` should disappear from `Get-Volume` and `source.vhdx` should no longer exist in the `Disk_Imaging` folder. The `image\` directory containing your E01 is left in place so you can hang on to the image if you want. Delete it manually when you no longer need it.
