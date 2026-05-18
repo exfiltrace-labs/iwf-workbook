@@ -4,9 +4,242 @@ moduleId: module-9
 labNumber: Lab 9.2
 title: Checking for Encryption
 order: 2
-readTime: 10 minutes
+readTime: 30 minutes
 difficulty: beginner
-description: Scan a system for BitLocker, VeraCrypt, and other encryption products before you make an irreversible acquisition decision.
+description: Detect encrypted volumes on a live Windows system, cross-validate your findings, and decide what to do next before any irreversible acquisition step.
+references:
+  - id: edd
+    label: Magnet Encrypted Disk Detector
+    url: https://www.magnetforensics.com/resources/encrypted-disk-detector/
+    detail: Magnet Forensics
+  - id: manage-bde
+    label: manage-bde command reference
+    url: https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/manage-bde
+    detail: Microsoft Learn
+  - id: enable-bitlocker
+    label: Enable-BitLocker cmdlet reference
+    url: https://learn.microsoft.com/en-us/powershell/module/bitlocker/enable-bitlocker
+    detail: Microsoft Learn
+  - id: vhdx
+    label: Manage virtual hard disks
+    url: https://learn.microsoft.com/en-us/windows-server/storage/disk-management/manage-virtual-hard-disks
+    detail: Microsoft Learn
 ---
 
-Placeholder lab.
+import prepSuccess from './images/prep_success.png'
+import getChildItem from './images/get-childitem.png'
+import eddOutput from './images/edd_output.png'
+import eedhOutput from './images/eedh_output.png'
+import bdeOutput from './images/bde_output.png'
+
+## Background
+
+Checking for encryption is one of the first things you do on a live system, and it has to happen *before* any irreversible decision. Encryption changes everything about an acquisition. A live, unlocked, encrypted machine is the only moment when the volume encryption keys are sitting decrypted in RAM. The moment that machine powers off, those keys may be gone, and the disk you image afterward will be rendered unreadable.
+
+When encryption is in play and the keys aren't recoverable, a physical disk image becomes useless to you. The sensible fallback is a **live logical image**: a file-level copy of the mounted, unlocked volume taken while the system is still running. A logical image reads files through the operating system's decrypted view, so what lands on your evidence drive is data you can actually analyze. You give up access to unallocated space, slack, deleted-but-not-yet-overwritten content, and most low-level file-system metadata, but the tradeoff is worth it.
+
+Accurately detecting encryption is therefore a precondition for every acquisition decision that follows. We're going to use **Magnet Encrypted Disk Detector (EDD)**<Cite id="edd" />, a tool that attempts to scan every accessible volume to report which encryption products, if any, are present.
+
+## Objectives
+
+By the end of this lab you should be able to:
+
+- Use Magnet Encrypted Disk Detector to identify encryption on a Windows system.
+- Interpret EDD results and identify which volumes are encrypted and with what product.
+- Describe the decision tree when encryption is detected.
+- Explain why encryption detection must happen before powering off a system.
+
+## Setup: Prepare a target volume
+
+The lab VM has no BitLocker enabled by default, so EDD on its own would just report "no encryption detected" everywhere. That's a useful finding in and of itself in a real engagement, but for teaching purposes we want EDD to actually have something to detect. We're going to mount a small, BitLocker-enabled NTFS volume backed by a virtual hard disk file (a `.vhdx`<Cite id="vhdx" />).
+
+From an **elevated** PowerShell session, drop the execution policy and run the `prep.ps1` script from the `Exercises` directory:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+C:\Forensics\Exercises\iwf\Encryption_Detection\prep.ps1
+```
+
+The script creates a 100 MB virtual hard disk file, attaches it as drive `Z:`, formats it NTFS, and BitLocker-encrypts<Cite id="enable-bitlocker" /> it with a throwaway password. When it finishes, it prints the encryption status. You should see `VolumeStatus: FullyEncrypted` and a `Password` entry in the `KeyProtector` list.
+
+<Figure
+  src={prepSuccess}
+  alt="Elevated PowerShell window showing prep.ps1 completing with VolumeStatus FullyEncrypted and a Password key protector listed for Z:"
+  caption="prep.ps1 finishing successfully. The status block at the bottom confirms FullyEncrypted with a Password key protector on Z:."
+/>
+
+**Note:** If `Z:` is already in use, the script will tell you and exit without touching anything. If a prior run of this lab is still mounted, re-run the same command with `-Cleanup` appended to tear it down. If something unrelated is already mounted at `Z:`, either free that letter or edit the script to point at any other unused letter.
+
+<Callout type="warning" title="Windows edition matters">
+  BitLocker is available on Windows 11 Pro and Enterprise but not on Windows 11 Home. If you are running on Home, you will need to use a different SKU.
+</Callout>
+
+## Step 1: Locate Encrypted Disk Detector
+
+On a real engagement, you'd introduce your acquisition tools into the environment from outside the suspect machine. The typical approach is a clean, prepared external drive that holds all of your portable acquisition tools and has enough free space to hold the output memory image and any logical images you collect along the way.
+
+For the sake of this lab, however, you are going to skip the external drive and run EDD straight from the same VM you're interrogating. **Magnet Encrypted Disk Detector (EDD)** can be found under the tools directory at `C:\Forensics\Tools\MagnetEDD\`. 
+
+Confirm it's there within the tools directory:
+
+```powershell
+Get-ChildItem 'C:\Forensics\Tools\MagnetEDD\'
+```
+
+<Figure
+  src={getChildItem}
+  alt="Elevated PowerShell window showing Get-ChildItem listing of C:\Forensics\Tools\MagnetEDD with EDDv310.exe and release_notes.txt"
+  caption="Get-ChildItem output for the MagnetEDD tool directory."
+  width={800}
+/>
+
+You should see a single executable, `EDDv310.exe`. The rest of this lab uses that full path. If your filename differs, substitute it everywhere the path appears below.
+
+## Step 2: Run EDD as administrator
+
+EDD needs to read low-level disk metadata directly from each physical drive and volume to check for encryption signatures. Like with many other acquisition tools, it needs administrative privileges. Right-click the executable and choose **Run as administrator**, or invoke it from the same elevated PowerShell window you used for the prep step:
+
+```powershell
+C:\Forensics\Tools\MagnetEDD\EDDv310.exe
+```
+
+A console window opens and EDD walks through three phases: a physical-drive scan, a logical-volume scan, and a secondary BitLocker-specific check. It looks for the signatures of major encryption products (BitLocker, VeraCrypt, TrueCrypt, PGP / Symantec Drive Encryption, and others) at known offsets in the volume metadata. 
+
+After a couple of seconds, EDD will finish its scan and print a summary of what it found on each physical drive and logical volume:
+
+<Figure
+  src={eddOutput}
+  alt="EDD console window showing the physical drive scan, logical volume scan, and the Secondary BitLocker Check flagging Volume Z: [Evidence] as BitLocker-encrypted"
+  caption="EDD's three-phase scan. The Secondary BitLocker Check flags Z: [Evidence] as BitLocker-encrypted and the summary line confirms encrypted volumes were detected."
+/>
+
+The key finding for this lab is the line `Volume Z: [Evidence] is encrypted using Bitlocker.` Note that EDD does not print a "no encryption detected" message for volumes that come back clean. They simply appear in the logical-volume listing and are absent from the Secondary BitLocker Check section. 
+
+The final summary line (`Encrypted volumes and/or processes were detected by EDD.`) confirms the overall result. The `0 GB` reading on `Z:` is just EDD's size column rounding a 100 MB volume down to zero.
+
+Take a screenshot or copy the output before you press any key. In a real engagement, this is the snapshot of encryption status at acquisition time, and it goes straight into your case notes.
+
+## Step 3: Cross-validate with Encrypted Disk Hunter (optional)
+
+If you have **Elcomsoft Encrypted Disk Hunter (EEDH)** installed, we can gather a quick second opinion on EDD's finding. EEDH scans physical and logical drives for the signatures of common encryption products, much like EDD does, but it presents the result as a table and writes a timestamped log file alongside the console output.
+
+From the same elevated PowerShell window, run:
+
+```powershell
+C:\Forensics\Tools\EncryptedDiskHunter\eedh.exe
+```
+
+The output groups partitions under each physical drive and flags any that look encrypted:
+
+<Figure
+  src={eedhOutput}
+  alt="EEDH console window showing a partition table for both physical drives, with the Z: partition row marked BitLocker in the Encryption column and a DO NOT TURN THE COMPUTER OFF warning underneath"
+  caption="EEDH's tabular output. The Z: partition row reads BitLocker in the Encryption column, with a warning underneath against powering the system off."
+/>
+
+The relevant row is `Partition1 (Z) | NTFS | 98.94 MB | BitLocker`, which matches what EDD reported on the `Z:` volume. EEDH also drops a timestamped log next to the executable, which is convenient if you want a written artifact on your acquisition drive alongside a screenshot of the console.
+
+The all-caps warning at the bottom of the output is making the same point the decision tree makes later in this lab: once power goes off, the keys sitting in RAM may go with it.
+
+## Step 4: Cross-validate with `manage-bde`
+
+It's generally recommended to cross-check EDD's finding against a second source before acting on it. EDD does its job well but it isn't foolproof, and a thorough acquisition usually includes additional checks: looking at running processes, scanning the system tray for indicators of encryption products (VeraCrypt, Symantec Drive Encryption, McAfee Drive Encryption, etc.), and reviewing installed programs and services.
+
+The built-in Windows command `manage-bde`<Cite id="manage-bde" /> is a solid cross-check on a Windows endpoint. It is a command-line tool for configuring and reporting on BitLocker Drive Encryption directly. Because it queries the operating system directly rather than reading volume metadata itself, agreement between `manage-bde` and EDD makes the finding meaningfully stronger. A disagreement is itself a finding worth investigating.
+
+From the same elevated PowerShell window, query the BitLocker status of every volume:
+
+```powershell
+manage-bde -status
+```
+
+You'll get a block of output per volume. The interesting blocks are `C:` (the unencrypted system drive) and `Z:` (the lab volume):
+
+<Figure
+  src={bdeOutput}
+  alt="Elevated PowerShell window showing manage-bde -status output with the Z: block expanded, including Conversion Status Fully Encrypted, Encryption Method AES 128, Protection Status Protection On, and a Password key protector"
+  caption="manage-bde -status output for the Z: volume, all matching what the previous tools reported."
+  width={600}
+/>
+
+In summary, the `manage-bde` output reports `Z:` as fully BitLocker-encrypted and `C:` as unencrypted, matching EDD's finding on both volumes. The relevant fields, side by side:
+
+| Field                | `Z:`            | `C:`            |
+| -------------------- | --------------- | --------------- |
+| Conversion Status    | Fully Encrypted | Fully Decrypted |
+| Percentage Encrypted | 100.0%          | 0.0%            |
+| Encryption Method    | AES 128         | None            |
+| Protection Status    | Protection On   | Protection Off  |
+| Key Protectors       | Password        | None Found      |
+
+With the encryption status settled, the next step in the acquisition process is to decide how to proceed.
+
+## Step 5: Walk the decision tree
+
+By this point you've imaged RAM and run your encryption check. What you do next depends on what that check found. Generally, the recommended order of operations looks like:
+
+
+| Step | If encrypted             | If not encrypted        |
+| ---- | ------------------------ | ----------------------- |
+| 1    | Triage image (optional)  | Terminate power         |
+| 2    | Live logical image       | Write block             |
+| 3    | Terminate power          | Triage image (optional) |
+| 4    | Forensic image of disk   | Forensic image of disk  |
+
+On the **encrypted** path, the live logical image has to happen before you pull power. That's the only window when the volume is unlocked and the keys are sitting in RAM. The logical drive is the operating system's decrypted view of the volume, so what lands on your evidence drive is readable data. The physical drive still presents the underlying encrypted blocks, which are useless without a key. Once the machine is off, those keys may be gone, and the disk image you take afterward is effectively unreadable until you obtain a key through some other means.
+
+On the **unencrypted** path, you can afford to (and generally should always) power down first, attach a write blocker, and then capture a forensic image at leisure. Acquiring a targeted triage image is optional but useful for getting a quick look while the full image is still in flight.
+
+<Callout type="tip" title="When in doubt, assume encryption">
+  If you can't say for certain whether a system uses encryption, default to the encrypted path and collect your triage and live logical images while the machine is still running. Anything mounted from an encrypted volume is likely to become inaccessible the moment the system is shut down, suspended, or hibernated.
+</Callout>
+
+<Question id="lab-9-2-q1" label="Q1" type="text" accept="bitlocker, BitLocker">
+  What encryption product did EDD report on the secondary lab volume?
+
+  <Hint>Look at the EDD output line for the `Z:` drive.</Hint>
+  <Solution>BitLocker. The prep step enabled BitLocker with a password protector on the `Z:` volume, so EDD's signature check identifies it cleanly.</Solution>
+</Question>
+
+<Question id="lab-9-2-q2" label="Q2" type="text" accept="Evidence">
+  Look at the logical-volume listing in EDD's output. What label does EDD report for the `Z:` drive?
+
+  <Hint>The label appears in square brackets right after the drive letter.</Hint>
+  <Solution>`Evidence`. The prep script formatted the volume with that label before turning on BitLocker.</Solution>
+</Question>
+
+<Question id="lab-9-2-q3" label="Q3" type="text" accept="manage-bde, manage-bde -status">
+  Which built-in Windows command did you use to cross-validate EDD's finding?
+
+  <Hint>The built-in Windows CLI for inspecting BitLocker on every volume.</Hint>
+  <Solution>`manage-bde` (the invocation used in this lab is `manage-bde -status`). It ships with every modern Windows install and reports BitLocker conversion status, percentage encrypted, lock status, and the encryption method for every volume.</Solution>
+</Question>
+
+<Question id="lab-9-2-q4" label="Q4" type="text" accept="AES 128, AES-128, AES128, AES 128 bit">
+  Look at the `manage-bde -status` output for the `Z:` volume. What `Encryption Method` does it report?
+
+  <Hint>It's one of the per-volume lines inside the `Z:` block.</Hint>
+  <Solution>`AES 128`. This matches the `-EncryptionMethod Aes128` argument the prep script passed to `Enable-BitLocker`. The other Windows-supported options would have been AES 256, XTS-AES 128, or XTS-AES 256.</Solution>
+</Question>
+
+<Question id="lab-9-2-q5" label="Q5" type="text" accept="Fully Decrypted">
+  Look at the `manage-bde -status` output for the `C:` volume. What `Conversion Status` does it report?
+
+  <Hint>The `C:` block sits above the `Z:` block in the manage-bde output.</Hint>
+  <Solution>`Fully Decrypted`. The lab VM's system drive has no BitLocker enabled, so both EDD and `manage-bde` report it as clean.</Solution>
+</Question>
+
+## Wrapping Up
+
+You just ran a pre-acquisition encryption check using multiple independent tools and used the result to select an acquisition path.
+
+While EDD, EEDH, and `manage-bde` are what this lab used, they're far from the only options. Other detection tools (Belkasoft, VeraCrypt-aware scanners, etc.) cover the same ground, various registry hives can carry hints about installed encryption products, and volume metadata can be inspected directly with low-level tools. What matters is running *something* before any irreversible step, and cross-validating the result.
+
+### Cleanup
+When you're finished with the lab, run the same script with `-Cleanup` to detach the evidence volume and delete the underlying VHDX. The BitLocker state will be removed as well, so there is no need to explicitly disable encryption first:
+
+```powershell
+C:\Forensics\Exercises\iwf\Encryption_Detection\prep.ps1 -Cleanup
+```
+
+Drive `Z:` should disappear from `Get-Volume`, and `evidence.vhdx` should no longer exist in the `Encryption_Detection` folder, bringing the lab VM back to its pre-lab state.

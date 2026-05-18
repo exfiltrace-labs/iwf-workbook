@@ -495,6 +495,20 @@
     break-inside: avoid;
     page-break-inside: avoid;
   }
+
+  /* On screen, CodeBlock wraps its content in `<pre class="overflow-x-auto">`
+     so long commands get a horizontal scrollbar. Paper has no scrollbar,
+     so the overflow is silently clipped at the page edge. Force long
+     lines to wrap instead: break at whitespace when possible, and fall
+     back to breaking inside long unbroken tokens (paths, URLs) so
+     nothing gets cut off. */
+  pre,
+  pre code {
+    overflow: visible !important;
+    white-space: pre-wrap !important;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
   h1, h2, h3, h4 {
     break-after: avoid;
     page-break-after: avoid;

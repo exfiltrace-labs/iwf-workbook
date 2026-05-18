@@ -345,4 +345,18 @@ export default defineConfig({
   define: {
     __COMMIT_HASH__: JSON.stringify(COMMIT_HASH),
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('react-dom') || id.includes('/react/') || id.includes('scheduler')) return 'vendor-react'
+          if (id.includes('react-router')) return 'vendor-router'
+          if (id.includes('@radix-ui')) return 'vendor-radix'
+          if (id.includes('highlight.js')) return 'vendor-highlight'
+          if (id.includes('@mdx-js')) return 'vendor-mdx'
+        },
+      },
+    },
+  },
 })

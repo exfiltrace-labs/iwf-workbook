@@ -73,22 +73,18 @@ For the sake of this lab, you are going to capture from the same Windows machine
   In this lab you capture from the same Windows machine you are sitting at and write the output to that machine's local disk. On a real engagement, you'd want the acquisition tool and the captured image to live on external media. We are taking the shortcut here for the sake of demonstration and reproducibility.
 </Callout>
 
-WinPmem<Cite id="winpmem" /> is already on this machine. Confirm it from PowerShell:
+First, locate WinPmem<Cite id="winpmem" /> within the tools directory:
 
 ```powershell
-Get-ChildItem 'C:\Forensics\Tools\WinPmem\' -Filter '*winpmem*.exe'
+Get-ChildItem 'C:\Forensics\Tools\WinPmem\'
 ```
 
-You should see a single executable. The rest of the lab assumes `C:\Forensics\Tools\WinPmem\go-winpmem_amd64_1.0-rc2_signed.exe`. If your filename differs, substitute it everywhere the path appears below.
+You should see a single executable, `winpmem_mini_x64_rc2.exe`. The rest of the lab uses that full path. If your filename differs, substitute it everywhere the path appears below.
 
-<Callout type="note" title="On the WinPmem build pinned here">
-  This lab uses the current signed Velocidex build (`go-winpmem_amd64_1.0-rc2_signed.exe`), distributed alongside the Velociraptor toolkit. Older references and write-ups online use the legacy `winpmem_mini_x64_rcN.exe` mini build, which takes the output path as a single positional argument. The signed build uses an `acquire` subcommand instead, which is what this lab shows below. Both produce a valid memory image. If you are working from a different build, run it with `--help` first to confirm its syntax matches what you see here.
-</Callout>
-
-Create a destination folder for the output image:
+Next, create a destination folder for the output image:
 
 ```powershell
-New-Item -ItemType Directory -Path C:\Forensics\Exercises\MemoryAcquisition -Force
+New-Item -ItemType Directory -Path C:\Forensics\Exercises\iwf\Memory_Acquisition -Force
 ```
 
 ## Alternative acquisition tools and footprint considerations
@@ -109,13 +105,13 @@ A command-line tool that loads a driver, reads physical memory, writes the outpu
 
 The first step in pre-acquisition documentation is to **set up your case notes**. In a real engagement those notes live in your own case journal, whether that is a case management tool, an examiner laptop, or even a paper notebook. We want to limit the amount of instrumentation we run and data we introduce to the suspect system. However, there are certain system-specific details we may want to document during the acquisition process itself, which we will cover in a moment.
 
-For this lab, open Notepad as a stand-in for your examiner notebook. Save a new file as `C:\Forensics\Exercises\MemoryAcquisition\case_notes.txt` and record the following:
+For this lab, open Notepad as a stand-in for your examiner notebook. Save a new file as `C:\Forensics\Exercises\iwf\Memory_Acquisition\case_notes.txt` and record the following:
 
 - A case identifier you make up for this lab, for example `LAB-9-1-001`.
 - The examiner's name.
 - The **current date and time**, recorded from an NTP-synced reference clock (your phone, your watch, or any accurate clock that is not the suspect machine).
-- The tool you are about to run and its full path on the acquisition kit. In this lab that is `C:\Forensics\Tools\WinPmem\go-winpmem_amd64_1.0-rc2_signed.exe`.
-- The anticipated output path of the memory capture. In this lab that is `C:\Forensics\Exercises\MemoryAcquisition\memory.raw`.
+- The tool you are about to run and its full path on the acquisition kit. In this lab that is `C:\Forensics\Tools\WinPmem\winpmem_mini_x64_rc2.exe`.
+- The anticipated output path of the memory capture. In this lab that is `C:\Forensics\Exercises\iwf\Memory_Acquisition\memory.raw`.
 
 Leave the file open. You will append to it as the acquisition progresses.
 
@@ -129,10 +125,10 @@ Now it's time to acquire a memory image! Like many similar tools, WinPmem needs 
 
 Before you run the tool, record the start time in `case_notes.txt` from your external reference clock under a `Start time:` line. If you want to capture the **suspect's** view of the time as a separate forensic artifact (clock drift, deliberate clock manipulation), feel free to do so by glancing at the taskbar clock and recording its reading alongside your external timestamp.
 
-Now kick off the capture by invoking WinPmem with the `acquire` subcommand and your destination path as the argument:
+Now kick off the capture by invoking WinPmem with your destination path as its only argument:
 
 ```powershell
-C:\Forensics\Tools\WinPmem\go-winpmem_amd64_1.0-rc2_signed.exe acquire C:\Forensics\Exercises\MemoryAcquisition\memory.raw
+C:\Forensics\Tools\WinPmem\winpmem_mini_x64_rc2.exe C:\Forensics\Exercises\iwf\Memory_Acquisition\memory.raw
 ```
 
 WinPmem will immediately load its driver, perform some setup, and begin writing the memory image. Depending on the amount of RAM the VM has, the capture typically takes a few minutes. It is common for the resulting image size to be a bit larger than the installed RAM, because the raw format pads additional hardware-reserved gaps in the address space with zeros.
@@ -145,11 +141,7 @@ While it runs, make sure to leave the system alone. Avoid opening new applicatio
 
 When the tool finishes, read the current time off the same external reference clock you used for the start time and append it to `case_notes.txt` under an `End time:` line. Calculate the elapsed duration (end minus start) and record that too. If you want to capture the **suspect's** view of the time as a separate forensic artifact (clock drift, deliberate clock manipulation), feel free to do so by glancing at the taskbar clock and recording its reading alongside your external timestamp.
 
-WinPmem also prints its own duration on the last line of its output, formatted something like `Completed imaging in 1m8.3587075s`. Record that value too. It is a self-reported timing from the tool itself and should agree (within seconds) with your externally-measured duration. A meaningful disagreement is worth investigating before you trust the image.
-
-<Details summary="DumpIt alternative" eyebrow="If you are using DumpIt">
-  From the same elevated PowerShell, run `C:\Forensics\Tools\DumpIt\DumpIt.exe`. It prompts for an output path and a confirmation, then writes a `.raw` (or `.dmp`) file to wherever you specified. Point it at `C:\Forensics\Exercises\MemoryAcquisition\memory.raw` to keep the rest of the lab unchanged. Hashing, documentation, and the footprint discussion all apply identically to DumpIt's output.
-</Details>
+WinPmem also prints the suspect's system clock at the start and end of its run, in the form `The system time is: HH:MM:SS`. Record both values. Subtracting them gives a self-reported duration from inside the tool, on the suspect's view of time. It should agree (within seconds) with the externally-measured duration you took off your reference clock. A meaningful disagreement between the two is worth investigating before you trust the image.
 
 <Question id="lab-9-1-q1" label="Q1" type="text" accept="kernel driver, driver, device driver, kernel-mode driver, kernel mode driver">
   What kind of Windows component does WinPmem load in order to read physical memory?
@@ -177,7 +169,7 @@ WinPmem also prints its own duration on the last line of its output, formatted s
 Immediately after the capture finishes, hash the resulting memory image. This becomes your integrity baseline. Every later check that the image has not been altered should compare back to these values. There are a number of ways to compute a hash of a file, but the simplest on Windows is the built-in `Get-FileHash` PowerShell cmdlet:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 C:\Forensics\Exercises\MemoryAcquisition\memory.raw
+Get-FileHash -Algorithm SHA256 C:\Forensics\Exercises\iwf\Memory_Acquisition\memory.raw
 ```
 
 Note that the `-Algorithm` parameter can be used to select which hash function to compute. `Get-FileHash` supports SHA-256 (the default), MD5, SHA-1, SHA-384, and SHA-512<Cite id="get-filehash" />.
@@ -189,13 +181,13 @@ Note that the `-Algorithm` parameter can be used to select which hash function t
 It is also good practice to record an MD5 hash alongside the SHA-256. SHA-256 is generally the cryptographic authority, but plenty of legacy forensic tools and case-management systems still expect an MD5 field. Recording both gives the next examiner whichever value their workflow needs without having to re-hash the image:
 
 ```powershell
-Get-FileHash -Algorithm MD5 C:\Forensics\Exercises\MemoryAcquisition\memory.raw
+Get-FileHash -Algorithm MD5 C:\Forensics\Exercises\iwf\Memory_Acquisition\memory.raw
 ```
 
 And note the file size in bytes. The size becomes part of the image's identity in your case notes and acts as a quick first check that the capture is not truncated or otherwise off from what you would expect for the system's installed RAM:
 
 ```powershell
-(Get-Item C:\Forensics\Exercises\MemoryAcquisition\memory.raw).Length
+(Get-Item C:\Forensics\Exercises\iwf\Memory_Acquisition\memory.raw).Length
 ```
 
 Append all three values to `case_notes.txt`. From this point forward you can verify the image's integrity at any time by re-hashing and comparing.
@@ -229,7 +221,7 @@ Append all three values to `case_notes.txt`. From this point forward you can ver
   What is the size of your `memory.raw` file in bytes?
 
   <Hint>The `Get-Item` cmdlet returns a file object with a `Length` property that holds the size in bytes.</Hint>
-  <Solution>Specific to your VM, but typically somewhere between the size of installed RAM and a gigabyte or so larger. Raw format cannot represent sparse regions, so PCI memory-mapped I/O holes (typically a few hundred MB to roughly a GB above the 3 GB line on x64) are padded with zeros in the output. An 8 GB VM commonly produces a 9 GB raw image. That is expected, not a sign of corruption. The worrying case is a file noticeably *smaller* than installed RAM, which usually means the capture was interrupted.</Solution>
+  <Solution>Specific to your VM, but typically somewhere between the size of installed RAM and a gigabyte or so larger. The worrying case is a file noticeably *smaller* than installed RAM, which usually means the capture was interrupted.</Solution>
 </Question>
 
 ## Step 4: System Information Capture
@@ -241,10 +233,10 @@ Recording this is good practice for case documentation, even though modern memor
 A quick way to grab all of the relevant OS detail in one shot is the built-in `systeminfo` command. It reports hostname, OS name, OS version and build, architecture, install date, BIOS version, locale, total physical memory, and the full list of installed hotfixes. Run it from the same elevated PowerShell you used for the capture, and pipe it through `Tee-Object` so the output appears on screen and lands in a file at the same time:
 
 ```powershell
-systeminfo | Tee-Object -FilePath C:\Forensics\Exercises\MemoryAcquisition\systeminfo.txt
+systeminfo | Tee-Object -FilePath C:\Forensics\Exercises\iwf\Memory_Acquisition\systeminfo.txt
 ```
 
-That file now sits alongside your case notes and the memory image. Copy the hostname, OS name, OS version, and OS build lines out of the output and into `case_notes.txt`. You or another analyst can refer to the full `systeminfo.txt` later without re-running anything on a system that may by then no longer exist.
+That file now sits alongside your case notes and the memory image. Copy the hostname, OS name, OS version, OS build, and time zone lines out of the output and into `case_notes.txt`. You or another analyst can refer to the full `systeminfo.txt` later without re-running anything on a system that may by then no longer exist.
 
 <Question id="lab-9-1-q8" label="Q8" type="text">
   Look at your `systeminfo.txt` output. What is the system's `Host Name`?
@@ -281,39 +273,31 @@ Memory acquisition is one of the few practices in forensics where the only way t
 WinPmem itself prints the most important parts of its footprint in its own output. When you ran the capture, you would have seen output like:
 
 ```
-Writing driver to C:\Users\<user>\AppData\Local\Temp\<random>.sys
-Creating service winpmem
-Installed service winpmem
-Started service winpmem
+WinPmem64
+Extracting driver to C:\Users\<user>\AppData\Local\Temp\<random>.tmp
+Driver Unloaded.
+Loaded Driver C:\Users\<user>\AppData\Local\Temp\<random>.tmp.
+Deleting C:\Users\<user>\AppData\Local\Temp\<random>.tmp
 ```
 
 And when it finished:
 
 ```
-Stopped service winpmem
-Removing driver from C:\Users\<user>\AppData\Local\Temp\<random>.sys
+Driver Unloaded.
 ```
 
 Each of those lines is a discrete, attributable artifact on the suspect. For example:
 
-- The `.sys` file in `%TEMP%` is a kernel driver binary WinPmem dropped on disk. The cleanup deletes it, but the deletion itself records a USN Journal entry and leaves a freed `$MFT` record with the original timestamps.
-- `Creating service` / `Installed service` writes records under `HKLM\SYSTEM\CurrentControlSet\Services\winpmem`. The hive's transaction log and the parent key's `LastWrite` timestamp retain evidence of the install even after the service is removed.
-- `Started service` triggers an Event ID 7036 entry in the System event log naming the service.
+- The `.tmp` file in `%TEMP%` is the kernel driver binary WinPmem dropped on disk. WinPmem deletes the on-disk copy almost immediately after loading it into the kernel (you can see this in the `Deleting...` line), but the create and the delete each record a USN Journal entry and leave a freed `$MFT` record carrying the original timestamps.
+- `Loaded Driver` is the moment a kernel-mode driver entered the running kernel under your administrator credentials. The driver load is observable to kernel-mode callbacks and is exactly the kind of event an EDR product would surface and attribute back to your session.
 
 The rest of the footprint is not announced in the output but follows from running the tool:
 
 - Reading physical memory exercises kernel caches and page tables.
 - Writing the multi-gigabyte output file generates NTFS metadata activity.
-- Had you been working from external USB media (the way you would on a real case), connecting that drive would have written additional records under `HKLM\SYSTEM\CurrentControlSet\Enum\USBSTOR` and the `SetupAPI` device logs.
+- Had you been working from external USB media (the way you would on a real case), connecting that drive would have written additional records under `HKLM\SYSTEM\CurrentControlSet\Enum\USBSTOR`, the `SetupAPI` device logs, the Windows event logs, and elsewhere.
 
 None of that is malicious or improper. It is the unavoidable footprint of doing the job. This is why we document the acquisition times so carefully. They let us explain on record when the collection activity was performed, and let a future examiner match the artifacts left behind to that recorded window. The discipline is to know what you did, document what you did, and be able to explain it down the road, if asked.
-
-<Question id="lab-9-1-q12" label="Q12" type="text" accept="winpmem, the winpmem service, winpmem service">
-  What is the name of the Windows service that WinPmem creates and installs while it runs?
-
-  <Hint>It is named in the lines WinPmem prints at startup and again at cleanup.</Hint>
-  <Solution>`winpmem`. The service is created, started, stopped, and removed across the run.</Solution>
-</Question>
 
 ## Step 6: Final Documentation
 
@@ -321,17 +305,17 @@ Open your `case_notes.txt` and confirm it has all of the following recorded:
 
 - Case identifier
 - Examiner
-- Source system hostname and Windows edition, version, and build
 - Tool name and full path
 - Output path
 - Start timestamp, end timestamp, and elapsed duration (from both the suspect system and a trusted reference clock).
 - SHA-256 hash
 - MD5 hash
 - File size in bytes
+- Source system hostname, version, build, and time zone
 
 That file is your case style documentation for this acquisition. In a real case, this is the level of detail you want in your evidence log and your chain of custody record.
 
-<Question id="lab-9-1-q13" label="Q13" type="text" accept="hash, hashes, the hash, the hashes, cryptographic hash, cryptographic hashes, hash value, hash values, hash functions, hash algorithm, hashing algorithm">
+<Question id="lab-9-1-q12" label="Q12" type="text" accept="hash, hashes, the hash, the hashes, cryptographic hash, cryptographic hashes, hash value, hash values, hash functions, hash algorithm, hashing algorithm">
   SHA-256 and MD5 are both examples of what kind of cryptographic value?
 
   <Hint>It is a fixed length fingerprint of the file's bytes.</Hint>
