@@ -91,6 +91,17 @@ export const GLOSSARY: GlossaryEntry[] = [
       'The four NTFS timestamps maintained for every file: **M**odified (last data write), **A**ccessed (last read), **C**hanged (metadata changed), and **B**irth (file created). Used in timeline analysis to reconstruct file activity.',
   },
   {
+    term: 'avalanche effect',
+    definition:
+      'A property of cryptographic hash functions where any change to the input, no matter how small, produces a completely different-looking output.',
+  },
+  {
+    term: 'Volume Shadow Copy',
+    aliases: ['Volume Shadow Copies', 'VSS', 'shadow copy', 'shadow copies'],
+    definition:
+      'A point-in-time snapshot of a Windows volume, capturing the state of every file at the moment the snapshot was taken. Used by System Restore and backup tools, and forensically valuable for recovering historical or deleted file content.',
+  },
+  {
     term: 'NullMRU',
     definition:
       'This is a **placeholder term** used by the lab workbook to show how glossary tooltips work. It is not a real forensic artifact!',

@@ -26,6 +26,7 @@ references:
     detail: Wikipedia
 ---
 
+import setupOutput from './images/setup_output.png'
 import installWizard from './images/install_wizard.png'
 import ftkVersion from './images/ftk_version.png'
 import selectSource from './images/select_source.png'
@@ -63,7 +64,7 @@ C:\Forensics\Exercises\iwf\Disk_Imaging\prep.ps1
 The script creates a 500 MB virtual hard disk file, attaches it as drive `F:`, formats it NTFS with the label `Source`, and writes a small folder tree under `Documents\`, `Downloads\`, and `Pictures\`. When it finishes, it prints a summary line with the mount point, the VHDX path, and a file count.
 
 <Figure
-  src="https://placehold.co/900x320?text=prep.ps1+success+output"
+  src={setupOutput}
   alt="Elevated PowerShell window showing prep.ps1 completing with the F: drive mounted, sample files written, and a summary line listing file count and total bytes"
   caption="prep.ps1 finishing successfully. The summary at the bottom confirms the source volume is mounted at F: with the sample files written."
   width={800}

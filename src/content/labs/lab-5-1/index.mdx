@@ -4,9 +4,36 @@ moduleId: module-5
 labNumber: Lab 5.1
 title: Exploring Data at the Hex Level
 order: 1
-readTime: 20 minutes
+readTime: 40 minutes
 difficulty: beginner
-description: Open a file in a hex editor and read it the way the operating system does.
+description: Use a hex editor to identify a file by its magic header, read a little-endian value from raw bytes, prove that a file extension lies, extract embedded EXIF metadata, and find residual data in the unallocated space of a small disk image.
+references:
+  - id: hxd
+    label: HxD - Freeware Hex Editor and Disk Editor
+    url: https://mh-nexus.de/en/hxd/
+    detail: Maël Hörz
+  - id: exiftool
+    label: ExifTool
+    url: https://exiftool.org/
+    detail: Phil Harvey
+  - id: get-filehash
+    label: Get-FileHash cmdlet reference
+    url: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/get-filehash
+    detail: Microsoft Learn
+  - id: magic-numbers
+    label: List of file signatures
+    url: https://en.wikipedia.org/wiki/List_of_file_signatures
+    detail: Wikipedia
+  - id: endianness
+    label: Endianness
+    url: https://en.wikipedia.org/wiki/Endianness
+    detail: Wikipedia
 ---
 
-Placeholder lab.
+<div className="not-prose flex min-h-[60vh] flex-col items-center justify-center gap-6 text-center">
+  <div className="h-12 w-12 animate-spin rounded-full border-4 border-forensic-primary/60 border-r-transparent" />
+  <div>
+    <div className="text-lg font-semibold text-forensic-text">Loading lab content…</div>
+    <div className="mt-2 text-sm text-forensic-text/60">Hold tight, this lab will be ready shortly.</div>
+  </div>
+</div>

@@ -42,6 +42,11 @@ references:
     detail: Microsoft Learn
 ---
 
+import winpmemListing from './images/winpmem_listing.png'
+import winpmemCapture from './images/winpmem_capture.png'
+import hashOutput from './images/hash_output.png'
+import systeminfoOutput from './images/systeminfo_output.png'
+
 ## Background
 
 Memory acquisition should be the first thing you do on any live system. The moment power is cut, everything in RAM is (generally) gone. There is no undo. Live memory on a typical workstation holds multiple gigabytes of state you cannot reconstruct from anywhere else: running processes and their command-line invocations, open network connections and the processes that own them, registry hive content that has not yet been flushed to disk, decrypted contents of files the user had open, authentication tokens, and much more. All of it is potentially case-relevant evidence that you could end up throwing away by pulling the plug before acquisition.
@@ -78,6 +83,13 @@ First, locate WinPmem<Cite id="winpmem" /> within the tools directory:
 ```powershell
 Get-ChildItem 'C:\Forensics\Tools\WinPmem\'
 ```
+
+<Figure
+  src={winpmemListing}
+  alt="Elevated PowerShell window showing Get-ChildItem listing of C:\Forensics\Tools\WinPmem with winpmem_mini_x64_rc2.exe"
+  caption="Get-ChildItem output for the WinPmem tool directory."
+  width={800}
+/>
 
 You should see a single executable, `winpmem_mini_x64_rc2.exe`. The rest of the lab uses that full path. If your filename differs, substitute it everywhere the path appears below.
 
@@ -133,6 +145,13 @@ C:\Forensics\Tools\WinPmem\winpmem_mini_x64_rc2.exe C:\Forensics\Exercises\iwf\M
 
 WinPmem will immediately load its driver, perform some setup, and begin writing the memory image. Depending on the amount of RAM the VM has, the capture typically takes a few minutes. It is common for the resulting image size to be a bit larger than the installed RAM, because the raw format pads additional hardware-reserved gaps in the address space with zeros.
 
+<Figure
+  src={winpmemCapture}
+  alt="Elevated PowerShell window running WinPmem and showing the driver-extract and driver-load lines, the system time printout, and the per-MB capture progress as it writes memory.raw"
+  caption="WinPmem mid-capture. The output reports the temp driver extraction, the driver load, and live progress as it streams physical memory to memory.raw."
+  width={800}
+/>
+
 <Callout type="note" title="Capture time varies wildly">
   How long the dump takes depends on how much RAM the source system has and the destination drive's write speed. A lab VM with a few GB of RAM and a local SSD may finish in only a few minutes. A workstation with 64 GB of RAM writing to a slow USB stick can take an hour or more.
 </Callout>
@@ -169,8 +188,17 @@ WinPmem also prints the suspect's system clock at the start and end of its run, 
 Immediately after the capture finishes, hash the resulting memory image. This becomes your integrity baseline. Every later check that the image has not been altered should compare back to these values. There are a number of ways to compute a hash of a file, but the simplest on Windows is the built-in `Get-FileHash` PowerShell cmdlet:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 C:\Forensics\Exercises\iwf\Memory_Acquisition\memory.raw
+Get-FileHash -Algorithm SHA256 C:\Forensics\Exercises\iwf\Memory_Acquisition\memory.raw | Format-List
 ```
+
+The `| Format-List` at the end prints each property on its own line so the full 64-character hash and the path don't get truncated by the default table view.
+
+<Figure
+  src={hashOutput}
+  alt="Elevated PowerShell window showing Get-FileHash output for memory.raw piped through Format-List, with Algorithm, Hash, and Path each on their own line"
+  caption="Get-FileHash output for memory.raw. Piping through Format-List puts the Algorithm, Hash, and Path properties on separate lines so the full 64-character hash doesn't wrap or get truncated."
+  width={800}
+/>
 
 Note that the `-Algorithm` parameter can be used to select which hash function to compute. `Get-FileHash` supports SHA-256 (the default), MD5, SHA-1, SHA-384, and SHA-512<Cite id="get-filehash" />.
 
@@ -181,7 +209,7 @@ Note that the `-Algorithm` parameter can be used to select which hash function t
 It is also good practice to record an MD5 hash alongside the SHA-256. SHA-256 is generally the cryptographic authority, but plenty of legacy forensic tools and case-management systems still expect an MD5 field. Recording both gives the next examiner whichever value their workflow needs without having to re-hash the image:
 
 ```powershell
-Get-FileHash -Algorithm MD5 C:\Forensics\Exercises\iwf\Memory_Acquisition\memory.raw
+Get-FileHash -Algorithm MD5 C:\Forensics\Exercises\iwf\Memory_Acquisition\memory.raw | Format-List
 ```
 
 And note the file size in bytes. The size becomes part of the image's identity in your case notes and acts as a quick first check that the capture is not truncated or otherwise off from what you would expect for the system's installed RAM:
@@ -235,6 +263,13 @@ A quick way to grab all of the relevant OS detail in one shot is the built-in `s
 ```powershell
 systeminfo | Tee-Object -FilePath C:\Forensics\Exercises\iwf\Memory_Acquisition\systeminfo.txt
 ```
+
+<Figure
+  src={systeminfoOutput}
+  alt="Elevated PowerShell window showing systeminfo output piped through Tee-Object, with Host Name, OS Name, OS Version, OS Build, Time Zone, Total Physical Memory, and other fields visible"
+  caption="systeminfo output captured via Tee-Object. The same content is being written to disk and printed to the console so you can transcribe the key fields into your case notes."
+  width={900}
+/>
 
 That file now sits alongside your case notes and the memory image. Copy the hostname, OS name, OS version, OS build, and time zone lines out of the output and into `case_notes.txt`. You or another analyst can refer to the full `systeminfo.txt` later without re-running anything on a system that may by then no longer exist.
 

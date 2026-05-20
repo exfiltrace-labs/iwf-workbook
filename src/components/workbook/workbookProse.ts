@@ -18,6 +18,7 @@ export const WORKBOOK_PROSE_CLASS = `prose prose-stone dark:prose-invert max-w-n
     prose-code:before:content-none prose-code:after:content-none
     prose-code:rounded prose-code:bg-forensic-surfaceAlt
     prose-code:px-1 prose-code:py-0.5 prose-code:text-[14px]
+    prose-code:[overflow-wrap:anywhere]
   prose-table:my-6 prose-table:w-full prose-table:border-collapse
     prose-table:overflow-hidden prose-table:rounded-lg
     prose-table:border prose-table:border-forensic-border

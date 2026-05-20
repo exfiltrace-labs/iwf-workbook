@@ -360,7 +360,7 @@ export function Question({
             id={`${id ?? reactId}-hint`}
             className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2.5"
           >
-            <div className="prose prose-sm max-w-none text-amber-900 dark:text-amber-200">{slots.hint}</div>
+            <div className="prose prose-sm max-w-none text-amber-900 dark:text-amber-200 [&_code]:[overflow-wrap:anywhere]">{slots.hint}</div>
           </div>
         )}
       </div>
@@ -385,7 +385,7 @@ export function Question({
             Hide solution
           </button>
         </header>
-        <div className="prose prose-sm max-w-none px-5 py-4 [&>:first-child]:!mt-0 [&>:last-child]:!mb-0">
+        <div className="prose prose-sm max-w-none px-5 py-4 [&>:first-child]:!mt-0 [&>:last-child]:!mb-0 [&_code]:[overflow-wrap:anywhere]">
           {slots.solution}
         </div>
       </section>

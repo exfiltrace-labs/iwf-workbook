@@ -14,12 +14,19 @@ type GlossaryEntry = (typeof GLOSSARY)[number]
  * components every time would mean reauthoring every glossary term in
  * MDX. Doing it imperatively after the fact lets authors keep writing
  * plain prose.
+ *
+ * Idempotent: a second call against an already-decorated article picks
+ * up the terms that the first call already wrapped and treats them as
+ * used, so it doesn't keep wrapping further occurrences. This matters
+ * in React 18 dev mode, where StrictMode double-invokes the mount
+ * effect that calls this function.
  */
 export function autoLinkGlossary(article: HTMLElement): void {
   const phrases = collectPhrases()
   if (phrases.length === 0) return
 
   const usedTerms = new Set<string>()
+  seedUsedTermsFromExistingSpans(article, phrases, usedTerms)
 
   // Walk all text nodes inside paragraphs and list items only. We do not
   // want to touch headings, code blocks, tables, or callouts.
@@ -77,6 +84,39 @@ function collectPhrases(): Phrase[] {
   // Sort longest first so longer phrases win when one is a prefix of another.
   out.sort((a, b) => b.phrase.length - a.phrase.length)
   return out
+}
+
+/**
+ * Scan the article for `.glossary-term` spans that already exist (either
+ * because a prior pass of this function ran, or because an MDX author used
+ * a `<Definition>` inline component) and record the glossary terms they
+ * represent. Keeps the function idempotent across repeated invocations.
+ *
+ * The visible label sits in each span's first child element in both
+ * cases - either `.glossary-term-label` for spans this function built,
+ * or the first inline `<span tabIndex={0}>` for `<Definition>`. Reading
+ * that label and looking it up against the known phrases yields the
+ * canonical entry term, regardless of which phrase variant was matched.
+ */
+function seedUsedTermsFromExistingSpans(
+  article: HTMLElement,
+  phrases: Phrase[],
+  usedTerms: Set<string>,
+): void {
+  const spans = article.querySelectorAll<HTMLElement>('.glossary-term')
+  if (spans.length === 0) return
+
+  const phraseToTerm = new Map<string, string>()
+  for (const { entry, phrase } of phrases) {
+    phraseToTerm.set(phrase.toLowerCase(), entry.term)
+  }
+
+  for (const span of spans) {
+    const label = span.firstElementChild?.textContent?.trim().toLowerCase()
+    if (!label) continue
+    const canonical = phraseToTerm.get(label)
+    if (canonical) usedTerms.add(canonical)
+  }
 }
 
 function findEarliestMatch(

@@ -4,9 +4,438 @@ moduleId: module-4
 labNumber: Lab 4.1
 title: Hashing and Integrity Verification
 order: 1
-readTime: 15 minutes
+readTime: 40 minutes
 difficulty: beginner
-description: Generate and verify cryptographic hashes the way you will on every real engagement.
+description: Compute and verify cryptographic hashes across a number of files, observe the avalanche effect, verify integrity, and bulk-hash an entire directory to scale up your evidence review.
+references:
+  - id: get-filehash
+    label: Get-FileHash cmdlet reference
+    url: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/get-filehash
+    detail: Microsoft Learn
+  - id: certutil
+    label: certutil command reference
+    url: https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/certutil
+    detail: Microsoft Learn
+  - id: hashdeep
+    label: hashdeep / md5deep / sha256deep
+    url: https://github.com/jessek/hashdeep
+    detail: jessek/hashdeep on GitHub
+  - id: tiger
+    label: Tiger (hash function)
+    url: https://en.wikipedia.org/wiki/Tiger_(hash_function)
+    detail: Wikipedia
+  - id: whirlpool
+    label: Whirlpool (hash function)
+    url: https://en.wikipedia.org/wiki/Whirlpool_(hash_function)
+    detail: Wikipedia
+  - id: shattered
+    label: Announcing the first SHA-1 collision
+    url: https://security.googleblog.com/2017/02/announcing-first-sha1-collision.html
+    detail: Google Security Blog
+  - id: project-vic
+    label: Project VIC International
+    url: https://projectvic.org/
+    detail: Project VIC
+  - id: ncmec
+    label: National Center for Missing & Exploited Children
+    url: https://www.missingkids.org/
+    detail: NCMEC
 ---
 
-Placeholder lab.
+## Background
+
+A cryptographic hash takes an input of any size and produces a fixed-length output that uniquely represents that input. In digital forensics, hashes are the foundation of three different practices: **integrity verification** (proving a piece of evidence has not changed since acquisition), **identification** (matching files against reference sets or known-bad databases), and **deduplication** (collapsing identical files in a dataset to cut review time).
+
+In this lab you'll compute hashes with a number of different but similar tools, watch the avalanche effect transform a hash beyond recognition after the smallest possible modification to a file, verify a sample against a known-good hash file the way you would on a real engagement, and audit a directory against a recorded baseline.
+
+## Objectives
+
+By the end of this lab you should be able to:
+
+- Compute file hashes with PowerShell's `Get-FileHash`, the legacy `certutil`, and purpose-built hash tooling.
+- Observe and explain the avalanche effect after the smallest possible change to a file.
+- Verify the integrity of a forensic image against its recorded hash.
+- Audit a folder of files against a recorded baseline and filter it against a known-hash list.
+
+## Setup: Prepare your lab folder
+
+The files needed for this lab can be located under `C:\Forensics\Exercises\iwf\Hashing\`:
+
+- `sample_image.dd` - a simulated forensic image standing in for one you'd receive at the start of a real engagement.
+- `sample_image.dd.hash` - the hash file recorded by whoever produced the image, written alongside it at acquisition time.
+- `bulk\` - a directory containing files you'll use for the bulk-hashing, dedup, and audit steps.
+- `known_good_hashes.txt` - a small known-hash reference file in hashdeep format.
+
+Begin by confirming everything is there:
+
+```powershell
+Get-ChildItem 'C:\Forensics\Exercises\iwf\Hashing\'
+```
+
+<Figure
+  src="https://placehold.co/900x420?text=Hashing+folder+recursive+listing"
+  alt="PowerShell window showing Get-ChildItem -Recurse output for C:\Forensics\Exercises\iwf\Hashing\ listing sample_image.dd, sample_image.dd.hash, known_good_hashes.txt, and the bulk\ folder with its synthetic files"
+  caption="The Hashing exercise directory containing the lab files."
+  width={800}
+/>
+
+The rest of the lab will work out of that folder. You don't need an elevated PowerShell session for hashing operations.
+
+## Step 1: Hash a file with PowerShell
+
+To begin calculating cryptographic hashes from data, we first need *data*. Open a PowerShell session and write the classic "quick brown fox" pangram into a file, using strict ASCII encoding so the resulting hash is reproducible:
+
+```powershell
+Set-Content -Path 'C:\Forensics\Exercises\iwf\Hashing\fox.txt' `
+            -Value 'The quick brown fox jumps over the lazy dog' `
+            -Encoding ASCII -NoNewline
+```
+
+The `-Encoding ASCII -NoNewline` flags force a pure ASCII byte sequence with no trailing newline and no UTF-8 byte-order mark. Without them, Windows would write something slightly different from what you typed, and your hash would not match a standard reference. We'll see in a moment how even the smallest single-byte change can transform the resulting hash beyond recognition.
+
+Confirm the file wrote correctly by reading it back to the console:
+
+```powershell
+Get-Content 'C:\Forensics\Exercises\iwf\Hashing\fox.txt'
+```
+
+<Figure
+  src="https://placehold.co/900x180?text=Get-Content+fox.txt+output"
+  alt="PowerShell window showing Get-Content output for fox.txt printing the single line 'The quick brown fox jumps over the lazy dog'"
+  caption="Reading fox.txt back to the console. The single line on screen is the exact byte sequence Set-Content just wrote."
+  width={800}
+/>
+
+Now calculate its **SHA-256 hash** with `Get-FileHash`<Cite id="get-filehash" />. The `Get-FileHash` cmdlet reads a file's bytes and computes a cryptographic digest of them using whichever algorithm you pick:
+
+```powershell
+Get-FileHash -Algorithm SHA256 'C:\Forensics\Exercises\iwf\Hashing\fox.txt' | Format-List
+```
+
+<Figure
+  src="https://placehold.co/900x260?text=Get-FileHash+output+for+fox.txt"
+  alt="PowerShell window showing Get-FileHash piped to Format-List for fox.txt, with Algorithm SHA256 and the full 64-character hex hash on its own line"
+  caption="Get-FileHash output for fox.txt. Format-List puts the Algorithm, Hash, and Path properties on separate lines to prevent truncation."
+  width={800}
+/>
+
+The `| Format-List` at the end prints each property on its own line so the full 64-character hash and the path don't get truncated by PowerShell's default table view.
+
+While we're at it, compute the **MD5 hash** of the same file for completeness. The `-Algorithm` parameter picks which hash function the cmdlet runs. By default, the cmdlet uses SHA-256, which is what we used above:
+
+```powershell
+Get-FileHash -Algorithm MD5 'C:\Forensics\Exercises\iwf\Hashing\fox.txt' | Format-List
+```
+
+Notice that the MD5 digest is shorter than the SHA-256 you computed earlier, and the value itself looks completely different even though the file hasn't changed. Different hash algorithms produce different fixed-length outputs, and two algorithms applied to the same input will always disagree on the result. `Get-FileHash` also supports SHA-1, SHA-384, and SHA-512 via the same `-Algorithm` parameter.
+
+<Question id="lab-4-1-q1" label="Q1" type="text" accept="d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592">
+  What is the SHA-256 hash of your `fox.txt`?
+
+  <Hint>It's the `Hash:` value in the `Get-FileHash` output for the SHA-256 invocation. 64 hex characters.</Hint>
+  <Solution>`d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592`. Every reader who wrote the file with `-Encoding ASCII -NoNewline` ends up with this exact value, because the underlying 43 bytes are identical and SHA-256 is deterministic. If yours differs, the file carries a different encoding, an extra newline, or a typo in the pangram.</Solution>
+</Question>
+
+<Question id="lab-4-1-q2" label="Q2" type="text" accept="9e107d9d372bb6826bd81d3542a419d6">
+  What is the MD5 hash of your `fox.txt`?
+
+  <Hint>Look at the `Hash:` value from the MD5 `Get-FileHash` invocation. 32 hex characters this time.</Hint>
+  <Solution>`9e107d9d372bb6826bd81d3542a419d6`. The canonical MD5 of "The quick brown fox jumps over the lazy dog" with no trailing newline. Same deterministic property as SHA-256: any correctly-written copy of the file produces this exact value.</Solution>
+</Question>
+
+<Question id="lab-4-1-q3" label="Q3" type="text" accept="SHA-256, SHA256, sha-256, sha256, SHA 256">
+  Which hash algorithm does `Get-FileHash` compute when you don't pass `-Algorithm`?
+
+  <Hint>This lab passes `-Algorithm SHA256` explicitly, but the cmdlet has a default.</Hint>
+  <Solution>**SHA-256**. Running `Get-FileHash <path>` with no algorithm flag produces the SHA-256 digest. We pass `-Algorithm SHA256` anyway because being explicit about the algorithm is the habit you want when the value is going into a case note.</Solution>
+</Question>
+
+## Step 2: Cross-check with certutil
+
+It's good practice in forensic work to verify your findings with a second independent tool. The major hashing algorithms are well-documented and their common implementations are battle-tested, so cross-checking is more about discipline than distrust. PowerShell's `Get-FileHash` is one great option. 
+
+The legacy Windows utility `certutil`<Cite id="certutil" /> is another. Built into Windows primarily for managing certificates and certificate authorities, it has long carried a `-hashfile` switch as a convenient side-feature. It's been around since long before PowerShell and is still common in legacy procedures.
+
+Run it against the same file using the `-hashfile` switch to produce a SHA-256 hash:
+
+```powershell
+certutil -hashfile 'C:\Forensics\Exercises\iwf\Hashing\fox.txt' SHA256
+```
+
+<Figure
+  src="https://placehold.co/900x220?text=certutil+SHA256+output"
+  alt="PowerShell window showing certutil -hashfile output for fox.txt, with a SHA256 hash of the file printed beneath"
+  caption="certutil's SHA-256 output for the same fox.txt file. The hex value matches what Get-FileHash produced, just formatted differently."
+  width={800}
+/>
+
+The hex value `certutil` prints should match the SHA-256 value `Get-FileHash` produced earlier, character for character. Note that hash values are **case-insensitive** when comparing, so capitalization differences between the two tools are acceptable. Two independent implementations agreeing on the same hash is your sanity check that nothing odd is happening.
+
+On Linux and macOS, the equivalent commands are `sha256sum` and `md5sum`, and they produce the same hashes for the same input. That's the deterministic property of hashing: same input, same hash, on any platform that implements the algorithm correctly.
+
+## Step 3: Cross-check with hashdeep
+
+`Get-FileHash` and `certutil` are general-purpose utilities. Another great purpose-built tool is **hashdeep**<Cite id="hashdeep" />, a forensic hashing program from Jesse Kornblum. A few notable capabilities set it apart:
+
+- **Multi-algorithm in a single pass.** It's able to compute MD5, SHA-1, SHA-256, Tiger<Cite id="tiger" />, and Whirlpool<Cite id="whirlpool" /> hashes simultaneously.
+- **Native recursive scanning.** It can recurse through a directory tree without any additional pipelining.
+- **Known-hash matching.** It can compare a folder against a reference list of known hashes to audit for matches.
+
+To continue our validation, use `hashdeep64` to compute the SHA-256 hash of `fox.txt`:
+
+```powershell
+hashdeep64 -c sha256 'C:\Forensics\Exercises\iwf\Hashing\fox.txt'
+```
+
+<Figure
+  src="https://placehold.co/900x300?text=hashdeep+SHA256+output+for+fox.txt"
+  alt="PowerShell window showing hashdeep64 -c sha256 output for fox.txt, with the hashdeep header lines and a single result row carrying size, SHA-256 hash, and full path"
+  caption="hashdeep computing the SHA-256 of fox.txt. The header lines describe the columns and the result row carries the file size, hash, and path."
+  width={800}
+/>
+
+As expected, the hash should match what `Get-FileHash` and `certutil` produced earlier against the same data. Three independent implementations agreeing is as much sanity-check as you'll need on a single file. 
+
+The output is verbose by design. It's a forensic record where `%%%%` lines declare the file format and column layout, `##` lines capture the invocation context (working directory and exact command), and the final row carries the file's size, hash, and full path.
+
+hashdeep also ships alongside a family of single-algorithm cousins: `md5deep.exe`, `sha1deep.exe`, `sha256deep.exe`, `tigerdeep.exe`, and `whirlpooldeep.exe` (plus a `*64.exe` 64-bit twin of each). They produce a simpler `<hash>  <path>` line per file, which is the layout most Linux tooling (and `sha256sum` in particular) produces and consumes. Try it out:
+
+```powershell
+sha256deep64 'C:\Forensics\Exercises\iwf\Hashing\fox.txt'
+```
+
+The result is the same SHA-256 you've already seen, just printed in the bare `<hash>  <path>` format.
+
+<Question id="lab-4-1-q4" label="Q4" type="text" accept="b97de512e91e3828b40d2b0fdce9ceb3c4a71f9bea8d88e75c4fa854df36725fd2b52eb6544edcacd6f8beddfea403cb55ae31f03ad62a5ef54e42ee82c3fb35">
+  Whirlpool is a 512-bit cryptographic hash function designed by Vincent Rijmen (co-designer of AES) and Paulo Barreto. Use `whirlpooldeep64` to compute the Whirlpool hash of `fox.txt`.
+
+  <Hint>Same calling pattern as `sha256deep64` above, but the binary is `whirlpooldeep64`.</Hint>
+  <Solution>`b97de512e91e3828b40d2b0fdce9ceb3c4a71f9bea8d88e75c4fa854df36725fd2b52eb6544edcacd6f8beddfea403cb55ae31f03ad62a5ef54e42ee82c3fb35`. Whirlpool produces a 128-character (512-bit) hex digest, double the width of SHA-256. It sees much less use than SHA-256 in modern forensic workflows but ships with hashdeep alongside the more common algorithms.</Solution>
+</Question>
+
+## Step 4: Trigger the avalanche effect
+
+The avalanche effect is the property of cryptographic hash functions that guarantees any change to the input, no matter how small, produces an output that bears no resemblance to the original hash. To watch it in action, open `fox.txt` in Notepad, replace the word `fox` with `box`, then save and close the editor. 
+
+That one-letter substitution touches a single byte of the file's contents, which is the smallest meaningful edit you can make to a text file. Now re-run the same SHA-256 hash you computed in the previous steps, using whatever tool you prefer:
+
+```powershell
+Get-FileHash -Algorithm SHA256 'C:\Forensics\Exercises\iwf\Hashing\fox.txt' | Format-List
+```
+
+<Figure
+  src="https://placehold.co/900x320?text=Avalanche+effect:+before+vs+after"
+  alt="PowerShell window showing two SHA-256 hashes of fox.txt, one before the fox-to-box edit and one after, side by side with no visible similarity between them"
+  caption="The same file, hashed before and after a single-character edit. The two hashes share no recognizable structure."
+  width={800}
+/>
+
+Compare the new hash against the one you wrote down. They share no recognizable structure. One byte of the input changed, and roughly half of the output bits flipped. There is no way to make a small modification that produces a small hash change.
+
+This is the **avalanche effect**, and it is exactly what makes hashing a useful integrity tool. Any modification produces a completely different hash. It doesn't matter whether the change was accidental or deliberate, or whether it touched a single bit, a single character, or a single megabyte. When two hashes match, you have mathematical certainty that the underlying bytes are identical. When they do not match, you know something has changed, even if you cannot tell what.
+
+The avalanche effect is what made MD5 and SHA-1 useful for decades even though both have since been broken for **adversarial collision resistance**<Cite id="shattered" /> (cases where an attacker deliberately constructs two different inputs that share a hash). For everyday integrity verification of evidence that wasn't crafted to attack a hash function, both algorithms remain entirely reliable in the field.
+
+<Question id="lab-4-1-q5" label="Q5" type="text" accept="c2f2e082c0857ed56c31d39454b8e49b12404b30e609abc1d10941cbf2a58eab">
+  What is the new SHA-256 hash of `fox.txt` after the `fox` → `box` edit?
+
+  <Hint>It's the `Hash:` value from the `Get-FileHash` you just re-ran.</Hint>
+  <Solution>`c2f2e082c0857ed56c31d39454b8e49b12404b30e609abc1d10941cbf2a58eab`. Same 43 bytes of input, one of them swapped from `f` (0x66) to `b` (0x62), and the resulting SHA-256 shares no recognizable structure with the pre-edit value. The hash length is still 64 hex characters because that's a property of the algorithm, not the input.</Solution>
+</Question>
+
+## Step 5: Verify a forensic image
+
+Forensic analysis only holds up when you can prove that the image you're working from is bit-for-bit identical to what was acquired. Before any analysis, it's recommended to hash the image you received and compare the result against the value recorded at acquisition. This not only ensures you're about to spend time analyzing the correct evidence, it also exposes any corruption or tampering that happened between acquisition and your workstation.
+
+The `sample_image.dd` file is a small, simulated disk image used to mimic what you would receive from a real acquisition. The exact same workflow applies on a multi-terabyte forensic image, an E01 evidence file, or any evidence container you're verifying during an investigation.
+
+`sample_image.dd.hash` is the acquisition-time hash record that travels with the image. It lists the SHA-256 and MD5 values that the image carried when it was first captured, which are the values you'll match the current copy against. Confirm its contents by printing it to the console:
+
+```powershell
+Get-Content 'C:\Forensics\Exercises\iwf\Hashing\sample_image.dd.hash'
+```
+
+You should see two lines listing the expected SHA-256 and MD5. Now compute the actual hash of the image to compare:
+
+```powershell
+Get-FileHash -Algorithm SHA256 'C:\Forensics\Exercises\iwf\Hashing\sample_image.dd' | Format-List
+```
+
+<Figure
+  src="https://placehold.co/900x380?text=Verify+sample_image.dd+against+recorded+hash"
+  alt="PowerShell window showing the sample_image.dd.hash contents on top and the Get-FileHash output for sample_image.dd below, with the SHA-256 values visibly matching"
+  caption="Verifying sample_image.dd against the recorded hash. The SHA-256 from the hash file and the SHA-256 from Get-FileHash line up exactly."
+  width={800}
+/>
+
+Compare the recorded hash against the one you just computed. The two should match character for character. A character-for-character match proves the image on your workstation is bit-for-bit identical to what was captured at acquisition, and you can move on to analysis confident that nothing has changed in transit.
+
+If the hashes do not match, **stop**. A mismatch means the image on your workstation is not the image that was acquired, which makes any analysis you perform meaningless at best and misleading at worst. Document the discrepancy with both hashes and both tools' output, then investigate what caused it. 
+
+<Question id="lab-4-1-q6" label="Q6" type="text" accept="FBBAB289F7F94B25736C58BE46A994C441FD02552CC6022352E3D86D2FAB7C83, fbbab289f7f94b25736c58be46a994c441fd02552cc6022352e3d86d2fab7c83">
+  What SHA-256 did `sample_image.dd.hash` record for the image?
+
+  <Hint>It's one of the two lines printed by `Get-Content` on the hash file. 64 hex characters.</Hint>
+  <Solution>`FBBAB289F7F94B25736C58BE46A994C441FD02552CC6022352E3D86D2FAB7C83`. The point of this step is that running `Get-FileHash` on `sample_image.dd` produces this exact same digest character for character, which is what proves the image hasn't drifted from acquisition.</Solution>
+</Question>
+
+## Step 6: Bulk-audit a folder
+
+A real case typically involves far more than one file: tens of thousands, sometimes millions. The integrity workflow has to scale with the dataset. Both PowerShell's pipeline and hashdeep's native recursion can handle these bulk scenarios, and you'll work through each. Hashdeep also brings two features that make it a forensic staple: matching a folder against a known-hash reference list, and auditing a folder against a recorded baseline.
+
+For the following tasks, we'll work out of the `bulk\` folder. It contains a mix of files and subdirectories chosen to demonstrate the workflows below.
+
+### Approach 1: PowerShell pipeline
+
+First, recursively hash every file under `bulk\` and export the results to a CSV:
+
+```powershell
+Get-ChildItem 'C:\Forensics\Exercises\iwf\Hashing\bulk' -Recurse -File |
+    Get-FileHash -Algorithm SHA256 |
+    Export-Csv -Path 'C:\Forensics\Exercises\iwf\Hashing\bulk_hashes.csv' -NoTypeInformation
+```
+
+Now load `bulk_hashes.csv` into Timeline Explorer and take a look at the duplicate-hash pair that surfaces when you sort by the Hash column:
+
+<Figure
+  src="https://placehold.co/900x340?text=Timeline+Explorer+bulk_hashes.csv"
+  alt="Timeline Explorer window showing bulk_hashes.csv with Algorithm, Hash, and Path columns. The rows for meeting_notes.txt and docs\meeting_notes_backup.txt share an identical SHA-256."
+  caption="bulk_hashes.csv loaded in Timeline Explorer after hashing the entire bulk folder. Sorting the Hash column lines up identical hashes next to each other."
+  width={800}
+/>
+
+You'll see one row per file with the algorithm, hash, and path. `meeting_notes.txt` and `docs\meeting_notes_backup.txt` have different names and live in different folders, but their SHA-256 values are identical because the underlying bytes match. That's the deduplication property in action. 
+
+On a real engagement with hundreds of thousands of files, this same pipeline is how an examiner collapses duplicates in a dataset before manual review. For example, Volume Shadow Copies (VSS) are point-in-time snapshots of a Windows volume that preserve the state of every file at the moment the snapshot was taken. When examining historic artifacts inside Volume Shadow Copies, deduplication is essential in order to cut down on the massive overlap of unchanged system and user files repeated across every snapshot.
+
+<Question id="lab-4-1-q7" label="Q7" type="text" accept="97adde7ee7c21a8617ee57f7a559fdf26b233f2ae3973a31e08af73fa3dde788">
+  Which SHA-256 value appears twice in `bulk_hashes.csv`?
+
+  <Hint>Sort the Hash column in Timeline Explorer and look for the two rows that line up next to each other.</Hint>
+  <Solution>`97adde7ee7c21a8617ee57f7a559fdf26b233f2ae3973a31e08af73fa3dde788`. That digest belongs to both `meeting_notes.txt` at the bulk root and `docs\meeting_notes_backup.txt`. They share a hash because they share bytes, regardless of name or location.</Solution>
+</Question>
+
+### Approach 2: hashdeep recursive scan
+
+hashdeep does the same job as the PowerShell pipeline above, but with recursion built in and an output format that's directly reusable as a baseline for the matching and audit steps later. In a single command, we are able to recurse through the folder, hash every file, and write the result to disk:
+
+```powershell
+hashdeep64 -r -c sha256 'C:\Forensics\Exercises\iwf\Hashing\bulk' | Out-File 'C:\Forensics\Exercises\iwf\Hashing\bulk_hashdeep.txt' -Encoding ASCII
+```
+
+The `-r` flag walks the folder recursively. The `-c sha256` restricts the output to one algorithm. Without it, hashdeep emits its full default algorithm set instead.
+
+Open `bulk_hashdeep.txt` in Notepad to see the results.
+
+<Figure
+  src="https://placehold.co/900x380?text=hashdeep+recursive+scan+output"
+  alt="Notepad window showing bulk_hashdeep.txt with a hashdeep header block starting with %%%% HASHDEEP-1.0, followed by one size,hash,path line per file. The two meeting_notes files share a SHA-256."
+  caption="hashdeep's recursive scan written to a baseline file."
+  width={800}
+/>
+
+Those `%%%%` lines mark the file as a hashdeep baseline, which makes it reusable as input to a future hashdeep invocation. The same `hashdeep64` binary can read it back in matching or audit mode to compare current state against the recorded values. The audit demo coming up replays this exact file.
+
+### Approach 3: Matching against a known-good list
+
+The `known_good_hashes.txt` file carries the hashes of two specific files inside the `bulk\` directory. On a real investigation, a list like this might be a vendor-supplied reference catalog, a previously-audited baseline, or any set of file hashes the examiner has already cleared and does not need to look at again.
+
+Run hashdeep in matching mode against the bulk folder to surface every file whose hash appears in the known-good list:
+
+```powershell
+hashdeep64 -m -k 'C:\Forensics\Exercises\iwf\Hashing\known_good_hashes.txt' -r 'C:\Forensics\Exercises\iwf\Hashing\bulk'
+```
+
+<Figure
+  src="https://placehold.co/900x260?text=hashdeep+-m+matches"
+  alt="PowerShell window showing hashdeep -m output listing only RemoteSystemToastIcon.png and HelloWorld.exe as files in bulk\ whose hashes appear in the known-good list"
+  caption="Matching mode prints only the files in bulk\ whose hashes appear in the known-good list."
+  width={800}
+/>
+
+Swap `-m` for `-x` to run hashdeep in negative matching mode, which inverts the filter and lists only the files whose hashes are *not* on the known-good list. Those are the files that might be worth manual attention.
+
+```powershell
+hashdeep64 -x -k 'C:\Forensics\Exercises\iwf\Hashing\known_good_hashes.txt' -r 'C:\Forensics\Exercises\iwf\Hashing\bulk'
+```
+
+<Figure
+  src="https://placehold.co/900x340?text=hashdeep+-x+unknowns"
+  alt="PowerShell window showing hashdeep -x output listing every file in bulk\ whose hash is not in the known-good list (everything except RemoteSystemToastIcon.png and HelloWorld.exe)"
+  caption="Negative matching mode prints only the files in bulk\ whose hashes are NOT on the known-good list."
+  width={800}
+/>
+
+By scaling this approach up to a real dataset, we can use the exact same methodology and commands to shrink a review queue of hundreds of thousands of files down to just the unknowns.
+
+<Callout type="tip" title="Flipping the workflow for known-bad hits">
+Point `-k` at a known-bad hash set instead (CSAM hashes from Project VIC<Cite id="project-vic" /> or NCMEC<Cite id="ncmec" />, malware sample hashes, fingerprints of proprietary documents you suspect have been exfiltrated, etc.). Matching mode is then a hit detector rather than a clearance filter, and any file that comes back is a high impact finding.
+</Callout>
+
+<Question id="lab-4-1-q8" label="Q8" type="text" answers={[
+  'HelloWorld.exe, RemoteSystemToastIcon.png',
+  'HelloWorld.exe,RemoteSystemToastIcon.png',
+  'HelloWorld.exe RemoteSystemToastIcon.png',
+  'HelloWorld.exe and RemoteSystemToastIcon.png',
+  'RemoteSystemToastIcon.png, HelloWorld.exe',
+  'RemoteSystemToastIcon.png,HelloWorld.exe',
+  'RemoteSystemToastIcon.png HelloWorld.exe',
+  'RemoteSystemToastIcon.png and HelloWorld.exe',
+  'C:\\Forensics\\Exercises\\iwf\\Hashing\\bulk\\HelloWorld.exe, C:\\Forensics\\Exercises\\iwf\\Hashing\\bulk\\RemoteSystemToastIcon.png',
+  'C:\\Forensics\\Exercises\\iwf\\Hashing\\bulk\\HelloWorld.exe,C:\\Forensics\\Exercises\\iwf\\Hashing\\bulk\\RemoteSystemToastIcon.png',
+  'C:\\Forensics\\Exercises\\iwf\\Hashing\\bulk\\HelloWorld.exe C:\\Forensics\\Exercises\\iwf\\Hashing\\bulk\\RemoteSystemToastIcon.png',
+  'C:\\Forensics\\Exercises\\iwf\\Hashing\\bulk\\HelloWorld.exe and C:\\Forensics\\Exercises\\iwf\\Hashing\\bulk\\RemoteSystemToastIcon.png',
+  'C:\\Forensics\\Exercises\\iwf\\Hashing\\bulk\\RemoteSystemToastIcon.png, C:\\Forensics\\Exercises\\iwf\\Hashing\\bulk\\HelloWorld.exe',
+  'C:\\Forensics\\Exercises\\iwf\\Hashing\\bulk\\RemoteSystemToastIcon.png,C:\\Forensics\\Exercises\\iwf\\Hashing\\bulk\\HelloWorld.exe',
+  'C:\\Forensics\\Exercises\\iwf\\Hashing\\bulk\\RemoteSystemToastIcon.png C:\\Forensics\\Exercises\\iwf\\Hashing\\bulk\\HelloWorld.exe',
+  'C:\\Forensics\\Exercises\\iwf\\Hashing\\bulk\\RemoteSystemToastIcon.png and C:\\Forensics\\Exercises\\iwf\\Hashing\\bulk\\HelloWorld.exe',
+]}>
+  Which two files in `bulk\` matched the known-good list?
+
+  <Hint>Look at the `-m` output. Two lines, two filenames.</Hint>
+  <Solution>**`HelloWorld.exe`** and **`RemoteSystemToastIcon.png`**. Those are the two files whose hashes appear in `known_good_hashes.txt`, so matching mode prints exactly those two rows and filters everything else out. Running `-x` against the same list would do the opposite, listing every other file in `bulk\` instead.</Solution>
+</Question>
+
+### Approach 4: Audit a working copy against a baseline
+
+This is the other reason hashdeep earns a spot in a forensic toolkit. The baseline file you wrote previously can be replayed against the folder later to verify nothing has changed. Re-run hashdeep against the same folder, this time in audit mode:
+
+```powershell
+hashdeep64 -a -k 'C:\Forensics\Exercises\iwf\Hashing\bulk_hashdeep.txt' -r 'C:\Forensics\Exercises\iwf\Hashing\bulk'
+```
+
+The `-a` flag enables audit mode and `-k` points at the baseline. With nothing changed since the baseline was written, hashdeep prints an audit summary saying every file matched and reports `Audit passed`.
+
+<Figure
+  src="https://placehold.co/900x280?text=hashdeep+audit+passed"
+  alt="PowerShell window showing hashdeep audit mode output with all match counters non-zero and a final 'Audit passed' line"
+  caption="hashdeep audit mode against the freshly-written baseline. With nothing changed since the baseline was recorded, every file matches and hashdeep reports 'Audit passed'."
+  width={800}
+/>
+
+Now create a mismatch on purpose. Open `bulk\memo.txt` in Notepad and add a single character, or run the following command to append one in place:
+
+```powershell
+Add-Content -Path 'C:\Forensics\Exercises\iwf\Hashing\bulk\memo.txt' -Value 'X' -Encoding ASCII -NoNewline
+```
+
+Now re-run the same audit command and see how hashdeep reacts to the change:
+
+```powershell
+hashdeep64 -a -k 'C:\Forensics\Exercises\iwf\Hashing\bulk_hashdeep.txt' -r 'C:\Forensics\Exercises\iwf\Hashing\bulk'
+```
+
+<Figure
+  src="https://placehold.co/900x340?text=hashdeep+audit+failed"
+  alt="PowerShell window showing hashdeep audit mode output with a line flagging memo.txt as not matching its known hash, mismatch counters non-zero, and a final 'Audit Failed' line"
+  caption="The same audit command after a single byte was appended to memo.txt. hashdeep flags the file individually and the summary line reports 'Audit Failed'."
+  width={800}
+/>
+
+This time the audit reports that `memo.txt` doesn't match its recorded hash, and the summary line reads `Audit Failed`. That is exactly the alarm you want when a working copy of evidence drifts from the version that was baselined. On a real engagement, an audit-mode failure reveals that files have changed across folders without forcing you to eyeball every line of a CSV. The underlying cause could be silent corruption, an accidental edit, or deliberate tampering.
+
+## Wrapping Up
+
+This lab walked through the full hashing toolkit. You used hashing for **integrity verification** when you checked a forensic image against its recorded hash, for **identification** when you matched files against a known reference list, for **deduplication** when you watched the same SHA-256 surface for multiple files, and for **drift detection** when audit mode flagged a deliberate file content change.
+
+Every one of those workflows starts the same way: hash the bytes, compare against a recorded value. Every finding you draw from a piece of evidence stands or falls on whether the bytes are provably unchanged. Hashing is how you prove it.
