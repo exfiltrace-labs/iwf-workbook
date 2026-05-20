@@ -42,6 +42,21 @@ references:
     detail: NCMEC
 ---
 
+import hashingFolderListing from './images/hashing_folder_listing.png'
+import foxSetGetContent from './images/fox_set_get_content.png'
+import foxFileHashSha256 from './images/fox_filehash_sha256.png'
+import foxFileHashMd5 from './images/fox_filehash_md5.png'
+import foxCertutilSha256 from './images/fox_certutil_sha256.png'
+import foxHashdeepSha256 from './images/fox_hashdeep_sha256.png'
+import avalancheEffect from './images/avalanche_effect.png'
+import sampleImageVerify from './images/sample_image_verify.png'
+import bulkHashesCsv from './images/bulk_hashes_csv.png'
+import bulkHashdeepBaseline from './images/bulk_hashdeep_baseline.png'
+import hashdeepMatching from './images/hashdeep_matching.png'
+import hashdeepNegativeMatching from './images/hashdeep_negative_matching.png'
+import hashdeepAuditPassed from './images/hashdeep_audit_passed.png'
+import hashdeepAuditFailed from './images/hashdeep_audit_failed.png'
+
 ## Background
 
 A cryptographic hash takes an input of any size and produces a fixed-length output that uniquely represents that input. In digital forensics, hashes are the foundation of three different practices: **integrity verification** (proving a piece of evidence has not changed since acquisition), **identification** (matching files against reference sets or known-bad databases), and **deduplication** (collapsing identical files in a dataset to cut review time).
@@ -73,8 +88,8 @@ Get-ChildItem 'C:\Forensics\Exercises\iwf\Hashing\'
 ```
 
 <Figure
-  src="https://placehold.co/900x420?text=Hashing+folder+recursive+listing"
-  alt="PowerShell window showing Get-ChildItem -Recurse output for C:\Forensics\Exercises\iwf\Hashing\ listing sample_image.dd, sample_image.dd.hash, known_good_hashes.txt, and the bulk\ folder with its synthetic files"
+  src={hashingFolderListing}
+  alt="PowerShell window showing Get-ChildItem output for C:\Forensics\Exercises\iwf\Hashing\ listing sample_image.dd, sample_image.dd.hash, known_good_hashes.txt, and the bulk\ folder"
   caption="The Hashing exercise directory containing the lab files."
   width={800}
 />
@@ -100,7 +115,7 @@ Get-Content 'C:\Forensics\Exercises\iwf\Hashing\fox.txt'
 ```
 
 <Figure
-  src="https://placehold.co/900x180?text=Get-Content+fox.txt+output"
+  src={foxSetGetContent}
   alt="PowerShell window showing Get-Content output for fox.txt printing the single line 'The quick brown fox jumps over the lazy dog'"
   caption="Reading fox.txt back to the console. The single line on screen is the exact byte sequence Set-Content just wrote."
   width={800}
@@ -113,10 +128,9 @@ Get-FileHash -Algorithm SHA256 'C:\Forensics\Exercises\iwf\Hashing\fox.txt' | Fo
 ```
 
 <Figure
-  src="https://placehold.co/900x260?text=Get-FileHash+output+for+fox.txt"
+  src={foxFileHashSha256}
   alt="PowerShell window showing Get-FileHash piped to Format-List for fox.txt, with Algorithm SHA256 and the full 64-character hex hash on its own line"
   caption="Get-FileHash output for fox.txt. Format-List puts the Algorithm, Hash, and Path properties on separate lines to prevent truncation."
-  width={800}
 />
 
 The `| Format-List` at the end prints each property on its own line so the full 64-character hash and the path don't get truncated by PowerShell's default table view.
@@ -126,6 +140,13 @@ While we're at it, compute the **MD5 hash** of the same file for completeness. T
 ```powershell
 Get-FileHash -Algorithm MD5 'C:\Forensics\Exercises\iwf\Hashing\fox.txt' | Format-List
 ```
+
+<Figure
+  src={foxFileHashMd5}
+  alt="PowerShell window showing Get-FileHash piped to Format-List for fox.txt with -Algorithm MD5, displaying the Algorithm field as MD5 and a 32-character hex MD5 hash on its own line"
+  caption="The MD5 hash of fox.txt. The Algorithm field now reads MD5 instead of SHA256, and the hash itself is 32 hex characters instead of 64 because MD5 produces a 128-bit digest where SHA-256 produces 256 bits."
+  width={900}
+/>
 
 Notice that the MD5 digest is shorter than the SHA-256 you computed earlier, and the value itself looks completely different even though the file hasn't changed. Different hash algorithms produce different fixed-length outputs, and two algorithms applied to the same input will always disagree on the result. `Get-FileHash` also supports SHA-1, SHA-384, and SHA-512 via the same `-Algorithm` parameter.
 
@@ -163,10 +184,9 @@ certutil -hashfile 'C:\Forensics\Exercises\iwf\Hashing\fox.txt' SHA256
 ```
 
 <Figure
-  src="https://placehold.co/900x220?text=certutil+SHA256+output"
+  src={foxCertutilSha256}
   alt="PowerShell window showing certutil -hashfile output for fox.txt, with a SHA256 hash of the file printed beneath"
   caption="certutil's SHA-256 output for the same fox.txt file. The hex value matches what Get-FileHash produced, just formatted differently."
-  width={800}
 />
 
 The hex value `certutil` prints should match the SHA-256 value `Get-FileHash` produced earlier, character for character. Note that hash values are **case-insensitive** when comparing, so capitalization differences between the two tools are acceptable. Two independent implementations agreeing on the same hash is your sanity check that nothing odd is happening.
@@ -188,10 +208,9 @@ hashdeep64 -c sha256 'C:\Forensics\Exercises\iwf\Hashing\fox.txt'
 ```
 
 <Figure
-  src="https://placehold.co/900x300?text=hashdeep+SHA256+output+for+fox.txt"
+  src={foxHashdeepSha256}
   alt="PowerShell window showing hashdeep64 -c sha256 output for fox.txt, with the hashdeep header lines and a single result row carrying size, SHA-256 hash, and full path"
   caption="hashdeep computing the SHA-256 of fox.txt. The header lines describe the columns and the result row carries the file size, hash, and path."
-  width={800}
 />
 
 As expected, the hash should match what `Get-FileHash` and `certutil` produced earlier against the same data. Three independent implementations agreeing is as much sanity-check as you'll need on a single file. 
@@ -224,10 +243,9 @@ Get-FileHash -Algorithm SHA256 'C:\Forensics\Exercises\iwf\Hashing\fox.txt' | Fo
 ```
 
 <Figure
-  src="https://placehold.co/900x320?text=Avalanche+effect:+before+vs+after"
+  src={avalancheEffect}
   alt="PowerShell window showing two SHA-256 hashes of fox.txt, one before the fox-to-box edit and one after, side by side with no visible similarity between them"
   caption="The same file, hashed before and after a single-character edit. The two hashes share no recognizable structure."
-  width={800}
 />
 
 Compare the new hash against the one you wrote down. They share no recognizable structure. One byte of the input changed, and roughly half of the output bits flipped. There is no way to make a small modification that produces a small hash change.
@@ -262,10 +280,9 @@ Get-FileHash -Algorithm SHA256 'C:\Forensics\Exercises\iwf\Hashing\sample_image.
 ```
 
 <Figure
-  src="https://placehold.co/900x380?text=Verify+sample_image.dd+against+recorded+hash"
+  src={sampleImageVerify}
   alt="PowerShell window showing the sample_image.dd.hash contents on top and the Get-FileHash output for sample_image.dd below, with the SHA-256 values visibly matching"
   caption="Verifying sample_image.dd against the recorded hash. The SHA-256 from the hash file and the SHA-256 from Get-FileHash line up exactly."
-  width={800}
 />
 
 Compare the recorded hash against the one you just computed. The two should match character for character. A character-for-character match proves the image on your workstation is bit-for-bit identical to what was captured at acquisition, and you can move on to analysis confident that nothing has changed in transit.
@@ -298,10 +315,9 @@ Get-ChildItem 'C:\Forensics\Exercises\iwf\Hashing\bulk' -Recurse -File |
 Now load `bulk_hashes.csv` into Timeline Explorer and take a look at the duplicate-hash pair that surfaces when you sort by the Hash column:
 
 <Figure
-  src="https://placehold.co/900x340?text=Timeline+Explorer+bulk_hashes.csv"
+  src={bulkHashesCsv}
   alt="Timeline Explorer window showing bulk_hashes.csv with Algorithm, Hash, and Path columns. The rows for meeting_notes.txt and docs\meeting_notes_backup.txt share an identical SHA-256."
   caption="bulk_hashes.csv loaded in Timeline Explorer after hashing the entire bulk folder. Sorting the Hash column lines up identical hashes next to each other."
-  width={800}
 />
 
 You'll see one row per file with the algorithm, hash, and path. `meeting_notes.txt` and `docs\meeting_notes_backup.txt` have different names and live in different folders, but their SHA-256 values are identical because the underlying bytes match. That's the deduplication property in action. 
@@ -328,10 +344,9 @@ The `-r` flag walks the folder recursively. The `-c sha256` restricts the output
 Open `bulk_hashdeep.txt` in Notepad to see the results.
 
 <Figure
-  src="https://placehold.co/900x380?text=hashdeep+recursive+scan+output"
+  src={bulkHashdeepBaseline}
   alt="Notepad window showing bulk_hashdeep.txt with a hashdeep header block starting with %%%% HASHDEEP-1.0, followed by one size,hash,path line per file. The two meeting_notes files share a SHA-256."
   caption="hashdeep's recursive scan written to a baseline file."
-  width={800}
 />
 
 Those `%%%%` lines mark the file as a hashdeep baseline, which makes it reusable as input to a future hashdeep invocation. The same `hashdeep64` binary can read it back in matching or audit mode to compare current state against the recorded values. The audit demo coming up replays this exact file.
@@ -347,7 +362,7 @@ hashdeep64 -m -k 'C:\Forensics\Exercises\iwf\Hashing\known_good_hashes.txt' -r '
 ```
 
 <Figure
-  src="https://placehold.co/900x260?text=hashdeep+-m+matches"
+  src={hashdeepMatching}
   alt="PowerShell window showing hashdeep -m output listing only RemoteSystemToastIcon.png and HelloWorld.exe as files in bulk\ whose hashes appear in the known-good list"
   caption="Matching mode prints only the files in bulk\ whose hashes appear in the known-good list."
   width={800}
@@ -360,7 +375,7 @@ hashdeep64 -x -k 'C:\Forensics\Exercises\iwf\Hashing\known_good_hashes.txt' -r '
 ```
 
 <Figure
-  src="https://placehold.co/900x340?text=hashdeep+-x+unknowns"
+  src={hashdeepNegativeMatching}
   alt="PowerShell window showing hashdeep -x output listing every file in bulk\ whose hash is not in the known-good list (everything except RemoteSystemToastIcon.png and HelloWorld.exe)"
   caption="Negative matching mode prints only the files in bulk\ whose hashes are NOT on the known-good list."
   width={800}
@@ -407,7 +422,7 @@ hashdeep64 -a -k 'C:\Forensics\Exercises\iwf\Hashing\bulk_hashdeep.txt' -r 'C:\F
 The `-a` flag enables audit mode and `-k` points at the baseline. With nothing changed since the baseline was written, hashdeep prints an audit summary saying every file matched and reports `Audit passed`.
 
 <Figure
-  src="https://placehold.co/900x280?text=hashdeep+audit+passed"
+  src={hashdeepAuditPassed}
   alt="PowerShell window showing hashdeep audit mode output with all match counters non-zero and a final 'Audit passed' line"
   caption="hashdeep audit mode against the freshly-written baseline. With nothing changed since the baseline was recorded, every file matches and hashdeep reports 'Audit passed'."
   width={800}
@@ -426,7 +441,7 @@ hashdeep64 -a -k 'C:\Forensics\Exercises\iwf\Hashing\bulk_hashdeep.txt' -r 'C:\F
 ```
 
 <Figure
-  src="https://placehold.co/900x340?text=hashdeep+audit+failed"
+  src={hashdeepAuditFailed}
   alt="PowerShell window showing hashdeep audit mode output with a line flagging memo.txt as not matching its known hash, mismatch counters non-zero, and a final 'Audit Failed' line"
   caption="The same audit command after a single byte was appended to memo.txt. hashdeep flags the file individually and the summary line reports 'Audit Failed'."
   width={800}

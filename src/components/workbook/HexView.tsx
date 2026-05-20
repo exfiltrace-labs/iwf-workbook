@@ -44,6 +44,11 @@ const DEFAULT_HIGHLIGHT_COLORS = [
  * (`offset | hex bytes | ASCII gutter`). Supports overlapping highlights
  * with a small legend underneath, which is the workhorse for any
  * "find the magic header" or "spot the embedded string" exercise.
+ *
+ * ASCII gutter renders printable ASCII (0x20-0x7e) and Latin-1 (0xA0-0xFF)
+ * codepoints. Control characters and undefined Windows-1252 bytes (0x00-0x1F,
+ * 0x7F-0x9F) render as `.`. This matches HxD's default ANSI gutter closely
+ * enough that, for example, `FF D8 FF E0` renders as `ÿØÿà`.
  */
 export function HexView({
   bytes,
@@ -114,7 +119,8 @@ export function HexView({
             </span>
             <span className="text-forensic-snippetText/80">
               {row.bytes.map((b, i) => {
-                const ch = b >= 0x20 && b <= 0x7e ? String.fromCharCode(b) : '.'
+                const printable = (b >= 0x20 && b <= 0x7e) || (b >= 0xa0 && b <= 0xff)
+                const ch = printable ? String.fromCharCode(b) : '.'
                 return (
                   <span
                     key={i}

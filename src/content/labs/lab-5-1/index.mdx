@@ -4,9 +4,9 @@ moduleId: module-5
 labNumber: Lab 5.1
 title: Exploring Data at the Hex Level
 order: 1
-readTime: 40 minutes
+readTime: 60 minutes
 difficulty: beginner
-description: Use a hex editor to identify a file by its magic header, read a little-endian value from raw bytes, prove that a file extension lies, extract embedded EXIF metadata, and find residual data in the unallocated space of a small disk image.
+description: Use a hex editor to identify a file by its magic header, read a little-endian value from raw bytes, confirm a file's true type when its extension has been changed, extract embedded EXIF metadata, and recover residual data from unallocated space in a disk image.
 references:
   - id: hxd
     label: HxD - Freeware Hex Editor and Disk Editor
@@ -30,10 +30,401 @@ references:
     detail: Wikipedia
 ---
 
-<div className="not-prose flex min-h-[60vh] flex-col items-center justify-center gap-6 text-center">
-  <div className="h-12 w-12 animate-spin rounded-full border-4 border-forensic-primary/60 border-r-transparent" />
-  <div>
-    <div className="text-lg font-semibold text-forensic-text">Loading lab content…</div>
-    <div className="mt-2 text-sm text-forensic-text/60">Hold tight, this lab will be ready shortly.</div>
-  </div>
-</div>
+## Background
+
+Every file on disk is just a sequence of bytes. The operating system layers a lot of useful machinery on top of those bytes (filenames, extensions, file-type associations, thumbnail previews), but underneath, every analysis question eventually comes back to "what bytes are actually there and what do they mean?" A hex editor lets you skip past the OS's interpretation and abstraction to look directly at the raw content. Working comfortably at the byte level is a foundational forensic skill, because every higher-level tool you'll pick up later is just parsing those same bytes into friendlier output for you.
+
+In this lab you'll use HxD<Cite id="hxd" /> to read a file's magic header, convert a multi-byte value out of little-endian byte ordering, identify content through file signatures, extract embedded EXIF metadata with ExifTool<Cite id="exiftool" />, parse a Windows shortcut to recover the path and timestamps of a file the user opened, and find residual data sitting in the unallocated space of a small disk image.
+
+## Objectives
+
+By the end of this lab you should be able to:
+
+- Identify a file's type from its magic header bytes.
+- Read a multi-byte value correctly under little-endian byte ordering.
+- Demonstrate why a file extension is not evidence of file type.
+- Extract embedded file metadata with ExifTool.
+- Parse a Windows shortcut (`.lnk`) and recover the target path, timestamps, and machine identifiers it preserves.
+- Locate residual data in the unallocated space of a small disk image.
+
+## Setup: Locate the lab files
+
+You'll work with four files in this lab, all under `C:\Forensics\Exercises\iwf\Hex_Exploration\`:
+
+- `IMG_1913.JPG` - a JPEG photograph with EXIF metadata embedded.
+- `endianness.bin` - a small binary file used to demonstrate little-endian byte order.
+- `Project_Northwind_Phase2_Charter.docx.lnk` - a Windows shortcut file.
+- `lab_disk.img` - a simulated forensic image.
+
+Confirm all four are there:
+
+```powershell
+Get-ChildItem 'C:\Forensics\Exercises\iwf\Hex_Exploration\'
+```
+
+<Figure
+  src="https://placehold.co/900x280?text=Hex_Exploration+folder+listing"
+  alt="PowerShell window showing Get-ChildItem listing of C:\Forensics\Exercises\iwf\Hex_Exploration\ with IMG_1913.JPG, endianness.bin, Project_Northwind_Phase2_Charter.docx.lnk, and lab_disk.img"
+  caption="The Hex Exploration exercise directory containing the lab files."
+  width={800}
+/>
+
+You don't need an elevated PowerShell session for any of this lab.
+
+## Step 1: Open a file in HxD and read its signature
+
+**HxD** is a free Windows hex editor. It shows a file's raw bytes alongside their ASCII interpretation and can open regular files, disk images, and physical devices alike.
+
+Launch HxD from the Start menu, or open the shortcut in `C:\Forensics\Tools\HxD\`. Go to **File → Open** and select `C:\Forensics\Exercises\iwf\Hex_Exploration\IMG_1913.JPG`.
+
+<Figure
+  src="https://placehold.co/900x520?text=HxD+opened+on+IMG_1913.JPG"
+  alt="HxD application window showing IMG_1913.JPG opened, with the three-column layout of offset on the left, hex bytes in the middle, and ASCII interpretation on the right"
+  caption="HxD with IMG_1913.JPG loaded. The three-column layout (offset, hex bytes, ASCII gutter) is the standard view for any hex editor."
+  width={800}
+/>
+
+You're now looking at the bytes of the file in three columns. The leftmost column is the **offset** in hex: how many bytes into the file you are. The middle column is the **hex** view of the bytes themselves. The rightmost column is those same bytes interpreted as **ASCII** characters, with dots filling in for non-printable bytes.
+
+Look at the very first row, offset `0x00000000`. The first three bytes read `FF D8 FF`. That's the JPEG magic header<Cite id="magic-numbers" />. Every standard JPEG file on the planet starts with those three bytes. In the ASCII column on the right, that opening renders as `ÿØÿà`, a pattern experienced examiners learn to recognize at a glance.
+
+The fourth byte (`E0` here, rendering as `à`) tells you what kind of metadata block leads the file, which is enough to distinguish the most common JPEG flavors:
+
+- `FF D8 FF E0` → JPEG with a JFIF metadata block (the original JPEG container, common on the web)
+- `FF D8 FF E1` → JPEG with an Exif metadata block
+- `FF D8 FF DB` → JPEG with no metadata block, jumping straight to image data
+
+So the `ÿØÿà` opening tells you two things at once. The file is a JPEG, and specifically one that opens with a JFIF metadata block. Without anyone telling you what this file is, the bytes themselves are indicating it.
+
+<HexView
+  bytes={`
+    FF D8 FF E0 00 14 4A 46 49 46 00 01 01 01 01 2C
+    01 2C 00 00 41 4D 50 46 FF E1 1D E0 45 78 69 66
+    00 00 4D 4D 00 2A 00 00 00 08 00 0C 01 0F 00 02
+    00 00 00 06 00 00 00 9E 01 10 00 02 00 00 00 0A
+    00 00 00 A4 01 12 00 03 00 00 00 01 00 06 00 00
+    01 1A 00 05 00 00 00 01 00 00 00 AE 01 1B 00 05
+    00 00 00 01 00 00 00 B6 01 28 00 03 00 00 00 01
+    00 02 00 00 01 31 00 02 00 00 00 05 00 00 00 BE
+    01 32 00 02 00 00 00 14 00 00 00 C4 01 3C 00 02
+    00 00 00 0A 00 00 00 D8 02 13 00 03 00 00 00 01
+    00 01 00 00 87 69 00 04 00 00 00 01 00 00 00 E2
+    88 25 00 04 00 00 00 01 00 00 09 CC 00 00 0B 0E
+    41 70 70 6C 65 00 69 50 68 6F 6E 65 20 31 35 00
+    00 00 00 48 00 00 00 01 00 00 00 48 00 00 00 01
+    31 38 2E 35 00 00 32 30 32 35 3A 30 36 3A 31 33
+    20 31 39 3A 34 30 3A 30 32 00 69 50 68 6F 6E 65
+    20 31 35 00 00 25 82 9A 00 05 00 00 00 01 00 00
+  `}
+  highlights={[
+    { start: 0, length: 3, label: 'JPEG magic header' },
+    { start: 6, length: 4, label: 'JFIF marker' },
+    { start: 28, length: 4, label: 'Exif marker' },
+  ]}
+  caption="The first 272 bytes of IMG_1913.JPG, with the JPEG magic header and the two metadata-block markers highlighted."
+/>
+
+Notice the strings the ASCII column on the right is surfacing. You'll spot `JFIF` and `Exif` near the beginning, the camera's **Make** and **Model**, and the **iOS version** that wrote the file. This is the embedded file metadata sitting right inside the file. The hex editor isn't doing anything clever. It's just showing the bytes, and the format itself is structured so that some of those bytes are human-readable strings.
+
+This is what every forensic file inspection ultimately comes down to. Bytes on the left, your interpretation on the right.
+
+<Question id="lab-5-1-q1" label="Q1" type="text" accept="iPhone 15, iphone 15, IPHONE 15, iPhone15, iphone15, Apple iPhone 15, apple iphone 15, APPLE IPHONE 15, Apple iPhone15, Apple.iPhone 15, Apple iphone 15">
+  According to the EXIF strings visible in the ASCII column, which iPhone model took this photo?
+
+  <Hint>The **Model** field is stored as a null-terminated ASCII string right after the **Make** field. Both are visible in the ASCII column of the hex view above.</Hint>
+  <Solution>**iPhone 15**. The camera writes the manufacturer as `Apple` and the model as `iPhone 15`, each as a null-terminated ASCII string in the EXIF block.</Solution>
+</Question>
+
+<Question id="lab-5-1-q2" label="Q2" type="text" accept="2025:06:13 19:40:02, 2025-06-13 19:40:02, 2025:06:13, 2025-06-13, 2025/06/13 19:40:02, 2025/06/13, June 13 2025, 13/06/2025, 06/13/2025">
+  What date and time does the EXIF block say this photo was taken?
+
+  <Hint>EXIF stores timestamps as ASCII text in the format `YYYY:MM:DD HH:MM:SS`. Find one in the ASCII column of the hex view above.</Hint>
+  <Solution>`2025:06:13 19:40:02` (June 13, 2025 at 7:40 PM local time). EXIF timestamps live as plain ASCII strings inside the file, which is why they show up legibly in the ASCII column even though everything around them is binary structure.</Solution>
+</Question>
+
+## Step 2: Decode a multi-byte value
+
+Reading individual bytes is only half the work. Once a value spans more than one byte, you also need to know which order those bytes were written in, and on Windows that order is almost always **little-endian**. The example you're about to look at is a classic demonstration of how getting it wrong can give you the wrong answer entirely.
+
+Open the next file. In HxD, **File → Open** → `C:\Forensics\Exercises\iwf\Hex_Exploration\endianness.bin`.
+
+Press **Ctrl+G** (Go to) and enter `C` in the offset field, which HxD reads as hex offset `0x0000000C`. Make sure `hex` is selected as the number system and **Offset relative to** is set to `begin`, then click **OK**. The cursor jumps to byte 12 from the start of the file. Click the first byte (`EF`) in the hex column, then hold **Shift** and click the fourth byte (`DE`) to select all four:
+
+```
+EF BE AD DE
+```
+
+Now look at the right-hand side of the HxD window. The **Data inspector** panel takes whatever bytes you currently have selected and shows them parsed as a series of different data types: signed and unsigned bytes, integer widths from 8 to 64 bits, floats, common date formats, and so on. Find the **UInt32** row. That's a 32-bit unsigned integer, which is exactly what four bytes adds up to.
+
+At the bottom of the Data inspector is a byte-order toggle that defaults to **little endian**. With that setting, the UInt32 row reads `3735928559`, which is `0xDEADBEEF` in hex<Cite id="endianness" />. Switch the toggle to **big endian** and the same four bytes now read `4022250974`, or `0xEFBEADDE`. The bytes on disk are the same regardless of the toggle setting, but the inspector decodes them as two completely different numbers depending on which byte order it applies.
+
+<Figure
+  src="https://placehold.co/900x420?text=HxD+Data+inspector+showing+UInt32"
+  alt="HxD window showing endianness.bin with the four bytes EF BE AD DE selected at offset 0x0000000C, and the Data inspector panel on the right with the UInt32 little-endian value 3735928559 visible alongside the byte-order toggle at the bottom"
+  caption="HxD with the four bytes in endianness.bin selected and the Data inspector open on the right. The UInt32 row shows the little-endian value, and the byte-order toggle at the bottom of the panel switches between little- and big-endian interpretations."
+  width={800}
+/>
+
+Most multi-byte numeric fields in Windows on-disk artifacts are stored little-endian, because Windows and the x86/x64 architectures it runs on are little-endian. Reading those fields in disk order without reversing the bytes gives you a different number than the value the file actually encodes. Some common artifacts where this comes up:
+
+- **NTFS $MFT records**: file sizes, cluster runs, and every timestamp field are little-endian.
+- **PE file headers**: every field in an EXE or DLL header is little-endian, including the entry point address and section sizes.
+- **Registry hive files**: cell sizes, value lengths, and sub-key offsets are all little-endian.
+- **EVTX event log records**: record sizes, event IDs, and channel IDs are little-endian.
+
+There are exceptions, though. For example, EXIF metadata inside a JPEG can be either big- or little-endian depending on what wrote the file. `IMG_1913.JPG` declares big-endian EXIF with `4D 4D` right after the `Exif` marker, and every EXIF field that follows is stored in that byte order. When you're decoding multi-byte values by hand, byte order is something to verify rather than assume.
+
+<Question id="lab-5-1-q3" label="Q3" type="text" accept="3405691582">
+  At offset `0x00000018` in `endianness.bin` there are four more bytes. What 32-bit value do they represent when interpreted little-endian?
+
+  <Hint>Perform the same workflow as before, applied at a different offset. Read the decimal value off the UInt32 row in the Data inspector.</Hint>
+  <Solution>`3405691582`, which is `0xCAFEBABE` in hex. The four bytes on disk are `BE BA FE CA`. Read left-to-right naively you'd get `0xBEBAFECA`, but interpreted little-endian, the least-significant byte (`BE`) comes first, so the value in memory is `0xCAFEBABE`.</Solution>
+</Question>
+
+## Step 3: Identify a renamed file by its bytes
+
+In the field you may encounter files whose extensions don't match their contents, sometimes from deliberate concealment, sometimes from file carving that pulls contents off raw storage without the original filename. A file extension is just a label that anyone with write access can change, and the bytes that actually define the file's type stay the same when you rename it.
+
+To demonstrate this in action, from PowerShell, make a copy of the JPEG with a `.txt` extension:
+
+```powershell
+Copy-Item 'C:\Forensics\Exercises\iwf\Hex_Exploration\IMG_1913.JPG' `
+          'C:\Forensics\Exercises\iwf\Hex_Exploration\suspicious.txt'
+```
+
+Next, open **File Explorer** and look at `suspicious.txt` in the directory listing. Windows now displays it with a Notepad text-document icon and treats Notepad as its default application, even though nothing inside the file has changed since it was a JPEG. Under the **Type** column, the file is even displaying as a `Text Document`. The OS's understanding of file type is driven entirely by the extension.
+
+<Figure
+  src="https://placehold.co/900x360?text=Explorer+showing+suspicious.txt+as+a+text+document"
+  alt="File Explorer window showing suspicious.txt in the Hex_Exploration folder with a Notepad text-document icon and a Type column reading Text Document, despite the file containing JPEG bytes"
+  caption="File Explorer's view of suspicious.txt. The Notepad icon and the Text Document type are inferred entirely from the .txt extension, not from anything in the file."
+  width={800}
+/>
+
+Now go back to HxD, **File → Open** → `suspicious.txt`, and look at offset `0x00000000`. Same `FF D8 FF`. Same JPEG, just wearing a different filename.
+
+<Figure
+  src="https://placehold.co/900x520?text=HxD+opened+on+suspicious.txt+with+FF+D8+FF"
+  alt="HxD window showing suspicious.txt opened, with the first three bytes FF D8 FF visible at offset 0x00000000, identical to the magic header IMG_1913.JPG showed earlier"
+  caption="suspicious.txt opened in HxD. The first three bytes are still FF D8 FF, exactly the same magic header as the original JPEG. Only the filename and extension changed."
+  width={800}
+/>
+
+Hash both files to drive the point home. If the bytes are identical, the SHA-256 hashes must be identical too:
+
+```powershell
+Get-FileHash -Algorithm SHA256 'C:\Forensics\Exercises\iwf\Hex_Exploration\IMG_1913.JPG' | Format-List
+Get-FileHash -Algorithm SHA256 'C:\Forensics\Exercises\iwf\Hex_Exploration\suspicious.txt' | Format-List
+```
+
+<Figure
+  src="https://placehold.co/900x360?text=Identical+SHA-256+hashes+for+both+files"
+  alt="PowerShell window showing two Get-FileHash results piped through Format-List, one for IMG_1913.JPG and one for suspicious.txt, with identical SHA-256 values"
+  caption="Two filenames, two extensions, one set of bytes. The matching SHA-256 hashes prove that the renamed file is byte-for-byte identical to the original."
+  width={800}
+/>
+
+The two SHA-256 hashes are identical<Cite id="get-filehash" />, which proves cryptographically that the bytes in both files are the same. Neither the hex editor nor the hash function pays any attention to the extension, because both of them read raw content directly. That principle is what makes hash-based and signature-based searches valuable in investigations where someone has renamed sensitive files to hide them. A filename search would skip right past those renamed files, but a content-based search would catch them regardless of the extension.
+
+<Question id="lab-5-1-q4" label="Q4" type="text" accept="7975042132F358DDB3D3A07196B9D804, 7975042132f358ddb3d3a07196b9d804">
+  Now hash both `IMG_1913.JPG` and `suspicious.txt` with MD5. What value do you get? Both files should produce the same hash.
+
+  <Hint>`Get-FileHash` accepts an `-Algorithm` parameter. Set it to `MD5` and reuse the same command pattern as the SHA-256 example above.</Hint>
+  <Solution>`7975042132F358DDB3D3A07196B9D804`. Both files produce identical MD5 hashes because they contain identical bytes, and the extension never enters into the hashing calculation.</Solution>
+</Question>
+
+## Step 4: Extract embedded metadata with ExifTool
+
+**ExifTool** is a command-line tool that reads and writes metadata across hundreds of file formats. Where HxD shows you raw bytes and leaves the interpretation to you, ExifTool parses the metadata for you and prints each field with its name and value. For a JPEG image, that means it parses out the EXIF block we just identified by hand and prints every tag inside it.
+
+To see this in action, open PowerShell and run:
+
+```powershell
+exiftool 'C:\Forensics\Exercises\iwf\Hex_Exploration\IMG_1913.JPG'
+```
+
+The output covers dozens of fields, and which ones appear depends on what created the file. A few are consistently useful in forensic work:
+
+- **Make** and **Model**: the device that took the photo.
+- **DateTimeOriginal**: when the photograph was actually taken, baked in by the camera at capture time. This is distinct from the filesystem's "Date modified" timestamp, which only tells you when the file was last touched on the current system.
+- **GPSLatitude** and **GPSLongitude**: if the device that took the photo had location services on, the coordinates of where that photo was taken can be retrieved.
+
+<Figure
+  src="https://placehold.co/900x520?text=ExifTool+output+for+IMG_1913.JPG"
+  alt="PowerShell window showing exiftool output for IMG_1913.JPG, with fields like File Type, Make, Model, DateTimeOriginal, and (if present) GPSLatitude visible"
+  caption="ExifTool dumping the embedded metadata of IMG_1913.JPG. The Make, Model, DateTimeOriginal, and (if recorded) GPS fields are exactly the kind of evidence that filesystem metadata alone can't give you."
+  width={800}
+/>
+
+The forensic value of EXIF is that it preserves facts about the photograph itself, independent of anything the filesystem records about the file. Filesystem timestamps only describe when the file was last touched on the current machine, but EXIF records when the shutter actually clicked, what device captured the photo, and (if location services were on) where in the world that happened. 
+
+A photo whose filesystem says it landed on this machine last week but whose EXIF says it was taken in March 2023 in Paris, when the suspect claims they have never been to France, is a fascinating lead to hand an investigator.
+
+<Question id="lab-5-1-q5" label="Q5" type="text" accept="2025:06:13 19:40:02.251+02:00">
+  What is the embedded **Create Date** of `IMG_1913.JPG` according to ExifTool?
+
+  <Hint>Look for `Create Date` in the ExifTool output. The value includes a subsecond suffix and a timezone offset.</Hint>
+  <Solution>`2025:06:13 19:40:02.251+02:00`. This is the camera's record of when the shutter clicked, complete with `.251` subsecond precision and a `+02:00` timezone offset. Subsecond precision is useful when you need to correlate a photo with other timestamped events down to fractions of a second, and the timezone offset places the device in a specific zone independent of GPS.</Solution>
+</Question>
+
+<Question id="lab-5-1-q6" label="Q6" type="text" accept="5 days 5:12:28">
+  In some cases EXIF will include details about the device itself at the moment of capture. How long had this iPhone been continuously powered on when the photo was taken?
+
+  <Hint>Look for the `Run Time Since Power Up` field in the ExifTool output. The value is rendered as days plus hours, minutes, and seconds.</Hint>
+  <Solution>`5 days 5:12:28`. The iPhone had been continuously powered on for 5 days, 5 hours, 12 minutes, and 28 seconds at the moment the shutter clicked. Subtracting that uptime from the photo's `Create Date` (June 13, 2025 at 19:40 local) places the device's most recent reboot at roughly June 8, 2025 around 14:27 local.</Solution>
+</Question>
+
+<Question id="lab-5-1-q7" label="Q7" type="text" accept="Madrid, madrid, MADRID, Madrid Spain, madrid spain, Plaza Mayor">
+  Take the `GPSLatitude` and `GPSLongitude` values from the ExifTool output and look them up. What city was the photo taken in?
+
+  <Hint>Paste the latitude and longitude into Google Maps' search bar. The <a href="https://support.google.com/maps/answer/18539?hl=en&co=GENIE.Platform%3DDesktop" target="_blank" rel="noopener noreferrer">Google Maps coordinate format reference</a> lists the formats it accepts.</Hint>
+  <Solution>**Madrid** (specifically the Plaza Mayor area of central Madrid). EXIF GPS lets you place the device geographically at the moment of capture, often accurate to within a few meters. That kind of evidence is independent of anything the host filesystem records and often survives every copy and rename the file goes through.</Solution>
+</Question>
+
+## Step 5: Parse a Windows LNK file with ExifTool
+
+**Windows shortcuts** (`.lnk` files) are one of the higher-value artifacts on a Windows system. They're written automatically by the OS with no user action required. Every time a user opens a file through the Windows shell (File Explorer, an Open dialog, the Start menu, etc.), Windows drops a fresh `.lnk` into `%APPDATA%\Microsoft\Windows\Recent\`. These shortcuts carry rich metadata about the files the user opened and often survive long after the original files themselves are gone.
+
+ExifTool parses the `LNK` format directly, alongside the hundreds of other file formats it recognizes. A shortcut is a small binary file that records everything Windows needs to re-open the file it points at, which means it also records everything an examiner needs to reconstruct that file later. 
+
+Many useful details, such as the **target's full path**, the **target's creation, modification, and access timestamps** at the moment the shortcut was made, the **size of the target**, the **volume serial number** of the drive the target lived on, and the **NetBIOS name** of the machine that created the shortcut can all be baked into the LNK. They can remain on disk long after the target file, the user account, or the source volume is destroyed.
+
+Run ExifTool against `Project_Northwind_Phase2_Charter.docx.lnk` in the lab folder:
+
+```powershell
+exiftool 'C:\Forensics\Exercises\iwf\Hex_Exploration\Project_Northwind_Phase2_Charter.docx.lnk'
+```
+
+The output is dense, but a handful of fields are of incredible forensic value:
+
+- **Local Base Path**: the absolute path of the *original file* the shortcut points at, drive letter and all. This survives the deletion of the target file, the target's parent directories, and even the user account.
+- **Working Directory**: the folder Windows would set as the current directory when the shortcut is launched. Tells you which folder the target document sat in on the source machine, regardless of where the shortcut itself sits now.
+- **Target File Size**, **Target File Create Date**, **Target File Modify Date**, **Target File Access Date**: the *original file's* size and timestamps as they stood when the shortcut was written.
+- **Drive Type** and **Drive Serial Number**: which volume the original file lived on. If the user opened the file from a removable drive that's no longer attached, the shortcut can still contain that drive's serial number.
+- **Machine ID**: the NetBIOS name of the machine that created the shortcut.
+
+<Figure
+  src="https://placehold.co/900x520?text=ExifTool+output+for+the+LNK+file"
+  alt="PowerShell window showing ExifTool output for Project_Northwind_Phase2_Charter.docx.lnk with Local Base Path, Working Directory, Drive Serial Number, Machine ID, and the Target File timestamps visible"
+  caption="ExifTool dumping a Windows shortcut."
+  width={800}
+/>
+
+A shortcut is evidence that the target file existed and that *someone* interacted with it at *some point*. When you investigate a system where the user has wiped working documents, detached the external drive they came from, or hidden them on an encrypted volume, the shortcuts in their Recent folder are often one of the only surviving records of what was there, where it lived, and when it was last touched.
+
+### LECmd: LNK Explorer Command Line Edition
+
+**LECmd** (LNK Explorer Command line) is one of **Eric Zimmerman's** purpose-built forensic tools. It parses LNK files exhaustively and prints every shell item, ExtraData block, and tracker substructure embedded in the file. It can be pointed at a single LNK with the `-f` flag, or at a whole directory with `-d` to batch-parse every shortcut under that path into a CSV report. 
+
+We won't dig into every additional block it produces, but even a quick single-file run pulls back a number of additional fields with forensic value. Run it against the same file:
+
+```powershell
+lecmd -f 'C:\Forensics\Exercises\iwf\Hex_Exploration\Project_Northwind_Phase2_Charter.docx.lnk'
+```
+
+<Figure
+  src="https://placehold.co/900x520?text=LECmd+output+for+the+LNK+file"
+  alt="PowerShell window showing LECmd parsing Project_Northwind_Phase2_Charter.docx.lnk with the shell item chain, ExtraData blocks, and TrackerDatabase fields visible"
+  caption="LECmd's exhaustive parse of the same LNK file."
+  width={800}
+/>
+
+LECmd's output is long and exhaustive, but contains a lot of useful data. 
+
+The first thing worth flagging is the way it separates timestamps into two distinct groups:
+
+- **Source** (`Source created` / `Source modified` / `Source accessed`): timestamps for the **LNK file itself** as it sits on the current system.
+- **Target** (`Target created` / `Target modified` / `Target accessed`): timestamps for the **original document** the shortcut points at, captured at the moment the LNK was written.
+
+Those are two independent timelines carried inside the same file, and each one tells you something different about how the shortcut and its target have been touched. It's important not to get them confused, as that could severely skew your interpretation of the evidence!
+
+From there the report continues into the file's flags, attributes, relative path, working directory, shell items, ExtraData blocks, and the TrackerDatabase block. Many of these fields aren't surfaced by general-purpose tools like ExifTool, which is why a purpose-built LNK parser is worth having in the toolkit.
+
+<Question id="lab-5-1-q8" label="Q8" type="text" answers={["C:\\Users\\tcm\\Documents\\Project Files\\2026\\Q2\\Northwind"]}>
+  According to the LNK artifact, what was the **working directory** of the original document the user opened?
+
+  <Hint>Look for the `Working Directory` field in either ExifTool's or LECmd's output. It's a full Windows path.</Hint>
+  <Solution>`C:\Users\tcm\Documents\Project Files\2026\Q2\Northwind`. The working directory is the folder Windows would set as the current directory if the user double-clicked the shortcut. For an investigator, it tells you where the target document actually lived on the source machine, regardless of where the shortcut itself sits now.</Solution>
+</Question>
+
+<Question id="lab-5-1-q9" label="Q9" type="text" accept="desktop-2u103d4, DESKTOP-2U103D4, Desktop-2u103d4">
+  What is the **hostname** of the machine that created this shortcut?
+
+  <Hint>Look for the `Machine ID` field in either ExifTool's or LECmd's output. It's the NetBIOS name of the source machine.</Hint>
+  <Solution>`desktop-2u103d4`. Windows embeds the NetBIOS name of the host that creates each LNK file. That can fortunately act as a strong indicator. A shortcut pulled from one machine still names the original host that wrote it, which can correlate user activity across multiple systems.</Solution>
+</Question>
+
+<Question id="lab-5-1-q10" label="Q10" type="text" accept="2026:05:20 13:15:18, 2026-05-20 13:15:18, 2026/05/20 13:15:18, 2026:05:20 13:15:17, 2026-05-20 13:15:17, 2026/05/20 13:15:17">
+  When was the *target* document `Project_Northwind_Phase2_Charter.docx` last modified?
+
+  <Hint>Look for the `Target File Modify Date` field in ExifTool's output, or the `Target modified` field in LECmd's.</Hint>
+  <Solution>Either `2026:05:20 13:15:18` (from ExifTool) or `2026-05-20 13:15:17` (from LECmd) is correct. The 1-second gap is a precision quirk in how the LNK stores target timestamps internally. LECmd avoids the rounding by reading the more precise field, which is another reason purpose-built forensic tools earn their place over general-purpose ones.</Solution>
+</Question>
+
+<Question id="lab-5-1-q11" label="Q11" type="text" accept="00:0c:29:b3:3e:44, 00:0C:29:B3:3E:44, 00-0c-29-b3-3e-44, 00-0C-29-B3-3E-44, 000c29b33e44, 000C29B33E44">
+  Look at LECmd's output for this file. What **MAC address** does it surface from the TrackerDatabase block?
+
+  <Hint>Scroll to the **Tracker database block** section of LECmd's report. The field is labeled `MAC Address`.</Hint>
+  <Solution>`00:0c:29:b3:3e:44`. This is the MAC address of the network adapter on the machine that wrote the shortcut, lifted from the LNK's distributed-link-tracking data. ExifTool doesn't surface this field, which is one reason a purpose-built LNK parser earns its place in a forensic toolkit. The OUI prefix `00:0c:29` is registered to **VMware**, which tells you the source machine was almost certainly a VMware virtual machine.</Solution>
+</Question>
+
+## Step 6: Find residual data in lab_disk.img
+
+For the final step you'll work with a whole disk image instead of a single file. `lab_disk.img` is a small disk image with an NTFS partition and a chunk of unallocated space at the tail. Two pieces of residual content remain in that unallocated space, and we'll use HxD's text and hex search tools to find them in the raw bytes.
+
+Switch back to HxD and open up the image (**File → Open** → `C:\Forensics\Exercises\iwf\Hex_Exploration\lab_disk.img`).
+
+A few structural landmarks are worth recognizing as you scroll through the disk:
+
+- Offset `0x200`: the **primary GPT header**. Look at the ASCII column for the `EFI PART` magic string identifying the disk as GPT-partitioned.
+- Offset `0x400`: the **primary partition entry array**, a series of 128-byte records describing each partition.
+- Offset `0x100000` (1 MB into the disk): the start of the **NTFS partition** itself. The boot sector begins with `EB 52 90` followed by the ASCII string `NTFS` (`4E 54 46 53`).
+
+<Callout type="warning" title="Simulated image">
+  The GPT and NTFS structures inside `lab_disk.img` are real, but the volume contents are stub folders and zero-byte placeholders for the sake of simplicity. A real Windows install would have gigabytes of actual files, populated registry hives, and real `$MFT` and `$LogFile` data. None of that affects this step, but keep it in mind.
+</Callout>
+
+The two artifacts we're looking for live past the partition's end, in the unallocated tail at the back of the disk. We'll find them with two different search strategies.
+
+<Callout type="tip" title="Search direction">
+  If a search doesn't return a match, set the search direction to **All** instead of **Forward**. HxD only searches forward from the cursor by default.
+</Callout>
+
+First, run an ASCII search. Open **Search → Find** (or **Ctrl+F**), set the search type to **Text-string**, type `FORENSIC_MARKER`, and click **OK**.
+
+HxD jumps to the hit deep in the unallocated tail of the image. Take note of the offset in the leftmost column on the row where the match begins, which is the byte position inside the disk image where this content lives. The `0x` prefix simply means that the following number is in hexadecimal (base 16).
+
+The ASCII column on the right shows readable text from the body of a file that was deleted before the image was acquired. The filesystem no longer references this region, but the bytes are still physically here on disk.
+
+<Figure
+  src="https://placehold.co/900x460?text=HxD+find+FORENSIC_MARKER+hit"
+  alt="HxD window with the Find dialog overlaying lab_disk.img, the search hit landing on the FORENSIC_MARKER ASCII string with the surrounding deleted-file text visible in the ASCII column"
+  caption="HxD's text search lands on the FORENSIC_MARKER block in lab_disk.img's unallocated tail."
+  width={800}
+/>
+
+Now run a hex signature search instead of a text search. Open **Search → Find** again, switch the search type to **Hex-values**, enter `FF D8 FF E0`, and click **OK**.
+
+HxD jumps to a second hit further into the unallocated tail. Take note of this offset too. That's the start of a deleted JPEG, with the same magic header you learned to recognize earlier, now sitting in unpartitioned space where no filesystem entry points at it. Scroll past the file signature and you can see the file's structure continuing for a while before tailing off into zeros.
+
+This is the foundation of **file carving**: locate a known file signature in the raw bytes, find where the file structure ends, extract everything in between, and you've recovered the file even though the filesystem no longer references it. Actual carving with a dedicated tool is its own topic. The point of this step is to see directly that "deleted" data persists on disk until something writes over those exact bytes.
+
+<Question id="lab-5-1-q12" label="Q12" type="text" accept="0x03A00000, 0x3A00000, 03A00000, 3A00000, 0x03a00000, 0x3a00000, 03a00000, 3a00000, 60817408">
+  At what offset did HxD land when you searched for `FORENSIC_MARKER`?
+
+  <Hint>HxD's leftmost column shows the hex offset of each row. Read the offset on the row where the match begins.</Hint>
+  <Solution>`0x03A00000`. The match sits in the unallocated tail at the back of the disk, well past the NTFS partition's end.</Solution>
+</Question>
+
+<Question id="lab-5-1-q13" label="Q13" type="text" accept="0x03D00000, 0x3D00000, 03D00000, 3D00000, 0x03d00000, 0x3d00000, 03d00000, 3d00000, 63963136">
+  At what offset did HxD land when you searched for the JFIF signature `FF D8 FF E0`?
+
+  <Hint>Use the same workflow as previously, just for the second search. The hex offset of the row where the `FF D8 FF E0` bytes begin is your answer.</Hint>
+  <Solution>`0x03D00000`. That's the start of a deleted JPEG sitting in the unallocated tail of the image.</Solution>
+</Question>
+
+## Wrapping Up
+
+You just practiced many of the core skills that most forensic tools you'll ever use are built on top of. You identified a file by its magic header bytes, not by its extension. You proved that an extension is a label and not a transformation. You extracted embedded EXIF metadata. You parsed a Windows shortcut (`LNK`) and recovered the path, timestamps, and machine identifiers of a file that no longer exists on the disk you were examining. And you found data sitting in unallocated space that the filesystem itself no longer acknowledges exists.
+
+Hex-level intuition is what makes every higher-level forensic tool's output legible. When solutions like KAPE, Autopsy, FTK hand you a parsed structure, you'll understand what they're parsing underneath rather than treating their output as a black box.
