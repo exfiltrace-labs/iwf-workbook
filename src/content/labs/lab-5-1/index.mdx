@@ -30,6 +30,17 @@ references:
     detail: Wikipedia
 ---
 
+import hexExplorationListing from './images/hex_exploration_listing.png'
+import hxdJpgOpen from './images/hxd_jpg_open.png'
+import hxdDataInspector from './images/hxd_data_inspector.png'
+import explorerSuspiciousTxt from './images/explorer_suspicious_txt.png'
+import hxdSuspiciousTxt from './images/hxd_suspicious_txt.png'
+import sha256Match from './images/sha256_match.png'
+import exiftoolJpg from './images/exiftool_jpg.png'
+import exiftoolLnk from './images/exiftool_lnk.png'
+import lecmdLnk from './images/lecmd_lnk.png'
+import hxdForensicMarker from './images/hxd_forensic_marker.png'
+
 ## Background
 
 Every file on disk is just a sequence of bytes. The operating system layers a lot of useful machinery on top of those bytes (filenames, extensions, file-type associations, thumbnail previews), but underneath, every analysis question eventually comes back to "what bytes are actually there and what do they mean?" A hex editor lets you skip past the OS's interpretation and abstraction to look directly at the raw content. Working comfortably at the byte level is a foundational forensic skill, because every higher-level tool you'll pick up later is just parsing those same bytes into friendlier output for you.
@@ -63,7 +74,7 @@ Get-ChildItem 'C:\Forensics\Exercises\iwf\Hex_Exploration\'
 ```
 
 <Figure
-  src="https://placehold.co/900x280?text=Hex_Exploration+folder+listing"
+  src={hexExplorationListing}
   alt="PowerShell window showing Get-ChildItem listing of C:\Forensics\Exercises\iwf\Hex_Exploration\ with IMG_1913.JPG, endianness.bin, Project_Northwind_Phase2_Charter.docx.lnk, and lab_disk.img"
   caption="The Hex Exploration exercise directory containing the lab files."
   width={800}
@@ -78,10 +89,9 @@ You don't need an elevated PowerShell session for any of this lab.
 Launch HxD from the Start menu, or open the shortcut in `C:\Forensics\Tools\HxD\`. Go to **File → Open** and select `C:\Forensics\Exercises\iwf\Hex_Exploration\IMG_1913.JPG`.
 
 <Figure
-  src="https://placehold.co/900x520?text=HxD+opened+on+IMG_1913.JPG"
+  src={hxdJpgOpen}
   alt="HxD application window showing IMG_1913.JPG opened, with the three-column layout of offset on the left, hex bytes in the middle, and ASCII interpretation on the right"
   caption="HxD with IMG_1913.JPG loaded. The three-column layout (offset, hex bytes, ASCII gutter) is the standard view for any hex editor."
-  width={800}
 />
 
 You're now looking at the bytes of the file in three columns. The leftmost column is the **offset** in hex: how many bytes into the file you are. The middle column is the **hex** view of the bytes themselves. The rightmost column is those same bytes interpreted as **ASCII** characters, with dots filling in for non-printable bytes.
@@ -159,10 +169,9 @@ Now look at the right-hand side of the HxD window. The **Data inspector** panel 
 At the bottom of the Data inspector is a byte-order toggle that defaults to **little endian**. With that setting, the UInt32 row reads `3735928559`, which is `0xDEADBEEF` in hex<Cite id="endianness" />. Switch the toggle to **big endian** and the same four bytes now read `4022250974`, or `0xEFBEADDE`. The bytes on disk are the same regardless of the toggle setting, but the inspector decodes them as two completely different numbers depending on which byte order it applies.
 
 <Figure
-  src="https://placehold.co/900x420?text=HxD+Data+inspector+showing+UInt32"
+  src={hxdDataInspector}
   alt="HxD window showing endianness.bin with the four bytes EF BE AD DE selected at offset 0x0000000C, and the Data inspector panel on the right with the UInt32 little-endian value 3735928559 visible alongside the byte-order toggle at the bottom"
   caption="HxD with the four bytes in endianness.bin selected and the Data inspector open on the right. The UInt32 row shows the little-endian value, and the byte-order toggle at the bottom of the panel switches between little- and big-endian interpretations."
-  width={800}
 />
 
 Most multi-byte numeric fields in Windows on-disk artifacts are stored little-endian, because Windows and the x86/x64 architectures it runs on are little-endian. Reading those fields in disk order without reversing the bytes gives you a different number than the value the file actually encodes. Some common artifacts where this comes up:
@@ -195,19 +204,18 @@ Copy-Item 'C:\Forensics\Exercises\iwf\Hex_Exploration\IMG_1913.JPG' `
 Next, open **File Explorer** and look at `suspicious.txt` in the directory listing. Windows now displays it with a Notepad text-document icon and treats Notepad as its default application, even though nothing inside the file has changed since it was a JPEG. Under the **Type** column, the file is even displaying as a `Text Document`. The OS's understanding of file type is driven entirely by the extension.
 
 <Figure
-  src="https://placehold.co/900x360?text=Explorer+showing+suspicious.txt+as+a+text+document"
+  src={explorerSuspiciousTxt}
   alt="File Explorer window showing suspicious.txt in the Hex_Exploration folder with a Notepad text-document icon and a Type column reading Text Document, despite the file containing JPEG bytes"
   caption="File Explorer's view of suspicious.txt. The Notepad icon and the Text Document type are inferred entirely from the .txt extension, not from anything in the file."
   width={800}
 />
 
-Now go back to HxD, **File → Open** → `suspicious.txt`, and look at offset `0x00000000`. Same `FF D8 FF`. Same JPEG, just wearing a different filename.
+Now go back to HxD, **File → Open** → `suspicious.txt`, and look at offset `0x00000000`. Same `FF D8 FF`. Same JPEG, just under a different filename and extension.
 
 <Figure
-  src="https://placehold.co/900x520?text=HxD+opened+on+suspicious.txt+with+FF+D8+FF"
+  src={hxdSuspiciousTxt}
   alt="HxD window showing suspicious.txt opened, with the first three bytes FF D8 FF visible at offset 0x00000000, identical to the magic header IMG_1913.JPG showed earlier"
   caption="suspicious.txt opened in HxD. The first three bytes are still FF D8 FF, exactly the same magic header as the original JPEG. Only the filename and extension changed."
-  width={800}
 />
 
 Hash both files to drive the point home. If the bytes are identical, the SHA-256 hashes must be identical too:
@@ -218,10 +226,10 @@ Get-FileHash -Algorithm SHA256 'C:\Forensics\Exercises\iwf\Hex_Exploration\suspi
 ```
 
 <Figure
-  src="https://placehold.co/900x360?text=Identical+SHA-256+hashes+for+both+files"
+  src={sha256Match}
   alt="PowerShell window showing two Get-FileHash results piped through Format-List, one for IMG_1913.JPG and one for suspicious.txt, with identical SHA-256 values"
   caption="Two filenames, two extensions, one set of bytes. The matching SHA-256 hashes prove that the renamed file is byte-for-byte identical to the original."
-  width={800}
+
 />
 
 The two SHA-256 hashes are identical<Cite id="get-filehash" />, which proves cryptographically that the bytes in both files are the same. Neither the hex editor nor the hash function pays any attention to the extension, because both of them read raw content directly. That principle is what makes hash-based and signature-based searches valuable in investigations where someone has renamed sensitive files to hide them. A filename search would skip right past those renamed files, but a content-based search would catch them regardless of the extension.
@@ -250,7 +258,7 @@ The output covers dozens of fields, and which ones appear depends on what create
 - **GPSLatitude** and **GPSLongitude**: if the device that took the photo had location services on, the coordinates of where that photo was taken can be retrieved.
 
 <Figure
-  src="https://placehold.co/900x520?text=ExifTool+output+for+IMG_1913.JPG"
+  src={exiftoolJpg}
   alt="PowerShell window showing exiftool output for IMG_1913.JPG, with fields like File Type, Make, Model, DateTimeOriginal, and (if present) GPSLatitude visible"
   caption="ExifTool dumping the embedded metadata of IMG_1913.JPG. The Make, Model, DateTimeOriginal, and (if recorded) GPS fields are exactly the kind of evidence that filesystem metadata alone can't give you."
   width={800}
@@ -299,15 +307,14 @@ The output is dense, but a handful of fields are of incredible forensic value:
 
 - **Local Base Path**: the absolute path of the *original file* the shortcut points at, drive letter and all. This survives the deletion of the target file, the target's parent directories, and even the user account.
 - **Working Directory**: the folder Windows would set as the current directory when the shortcut is launched. Tells you which folder the target document sat in on the source machine, regardless of where the shortcut itself sits now.
-- **Target File Size**, **Target File Create Date**, **Target File Modify Date**, **Target File Access Date**: the *original file's* size and timestamps as they stood when the shortcut was written.
+- **Target File Create Date**, **Target File Modify Date**, **Target File Access Date**: the *original file's* size and timestamps as they stood when the shortcut was written.
 - **Drive Type** and **Drive Serial Number**: which volume the original file lived on. If the user opened the file from a removable drive that's no longer attached, the shortcut can still contain that drive's serial number.
 - **Machine ID**: the NetBIOS name of the machine that created the shortcut.
 
 <Figure
-  src="https://placehold.co/900x520?text=ExifTool+output+for+the+LNK+file"
+  src={exiftoolLnk}
   alt="PowerShell window showing ExifTool output for Project_Northwind_Phase2_Charter.docx.lnk with Local Base Path, Working Directory, Drive Serial Number, Machine ID, and the Target File timestamps visible"
   caption="ExifTool dumping a Windows shortcut."
-  width={800}
 />
 
 A shortcut is evidence that the target file existed and that *someone* interacted with it at *some point*. When you investigate a system where the user has wiped working documents, detached the external drive they came from, or hidden them on an encrypted volume, the shortcuts in their Recent folder are often one of the only surviving records of what was there, where it lived, and when it was last touched.
@@ -323,10 +330,9 @@ lecmd -f 'C:\Forensics\Exercises\iwf\Hex_Exploration\Project_Northwind_Phase2_Ch
 ```
 
 <Figure
-  src="https://placehold.co/900x520?text=LECmd+output+for+the+LNK+file"
+  src={lecmdLnk}
   alt="PowerShell window showing LECmd parsing Project_Northwind_Phase2_Charter.docx.lnk with the shell item chain, ExtraData blocks, and TrackerDatabase fields visible"
   caption="LECmd's exhaustive parse of the same LNK file."
-  width={800}
 />
 
 LECmd's output is long and exhaustive, but contains a lot of useful data. 
@@ -397,10 +403,9 @@ HxD jumps to the hit deep in the unallocated tail of the image. Take note of the
 The ASCII column on the right shows readable text from the body of a file that was deleted before the image was acquired. The filesystem no longer references this region, but the bytes are still physically here on disk.
 
 <Figure
-  src="https://placehold.co/900x460?text=HxD+find+FORENSIC_MARKER+hit"
+  src={hxdForensicMarker}
   alt="HxD window with the Find dialog overlaying lab_disk.img, the search hit landing on the FORENSIC_MARKER ASCII string with the surrounding deleted-file text visible in the ASCII column"
   caption="HxD's text search lands on the FORENSIC_MARKER block in lab_disk.img's unallocated tail."
-  width={800}
 />
 
 Now run a hex signature search instead of a text search. Open **Search → Find** again, switch the search type to **Hex-values**, enter `FF D8 FF E0`, and click **OK**.
