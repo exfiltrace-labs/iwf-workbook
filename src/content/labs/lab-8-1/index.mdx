@@ -4,9 +4,9 @@ moduleId: module-8
 labNumber: Lab 8.1
 title: Setting Up Your Forensic Workstation
 order: 1
-readTime: 40 minutes
+readTime: 60 minutes
 difficulty: beginner
-description: Audit the forensic-friendly defaults already configured on your workstation, set up a sensible case folder structure, get comfortable with PowerShell for forensic work, and learn the basics of Timeline Explorer for reviewing CSV output.
+description: Audit the forensic-friendly defaults configured on your workstation, set up a sensible case folder structure, get comfortable with PowerShell for forensic work, and learn the basics of Timeline Explorer for reviewing CSV output.
 references:
   - id: get-mppreference
     label: Get-MpPreference cmdlet reference
@@ -15,6 +15,22 @@ references:
   - id: powercfg
     label: powercfg command-line options
     url: https://learn.microsoft.com/en-us/windows-hardware/design/device-experiences/powercfg-command-line-options
+    detail: Microsoft Learn
+  - id: windows-update-au-policy
+    label: Manage additional Windows Update settings (NoAutoUpdate)
+    url: https://learn.microsoft.com/en-us/windows/deployment/update/waas-wu-settings
+    detail: Microsoft Learn
+  - id: long-paths-enabled
+    label: Maximum Path Length Limitation (LongPathsEnabled)
+    url: https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
+    detail: Microsoft Learn
+  - id: get-timezone
+    label: Get-TimeZone cmdlet reference
+    url: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/get-timezone
+    detail: Microsoft Learn
+  - id: start-transcript
+    label: Start-Transcript cmdlet reference
+    url: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.host/start-transcript
     detail: Microsoft Learn
   - id: powershell-getting-started
     label: PowerShell 101 - Getting started
@@ -28,12 +44,619 @@ references:
     label: Export-Csv cmdlet reference
     url: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/export-csv
     detail: Microsoft Learn
+  - id: eset-extension-phishing
+    label: Beware of threats lurking in booby-trapped PDF files
+    url: https://www.eset.com/gr-en/about/newsroom/press-releases-1/beware-of-threats-lurking-in-booby-trapped-pdf-files/
+    detail: ESET
+  - id: onedrive-uninstall
+    label: Turn off, disable, or uninstall OneDrive
+    url: https://support.microsoft.com/en-us/office/turn-off-disable-or-uninstall-onedrive-f32a17ce-3336-40fe-9c38-6efb09f944b0
+    detail: Microsoft Support
+  - id: nist-800-86
+    label: NIST SP 800-86, Guide to Integrating Forensic Techniques into Incident Response
+    url: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-86.pdf
+    detail: NIST
+  - id: iso-27037
+    label: ISO/IEC 27037 Guidelines for identification, collection, acquisition and preservation of digital evidence
+    url: https://www.iso.org/standard/44381.html
+    detail: ISO
+  - id: swgde-archiving
+    label: SWGDE Best Practices for Archiving Digital and Multimedia Evidence (19-F-003)
+    url: https://www.swgde.org/documents/published-complete-listing/19-f-003-swgde-best-practices-for-archiving-digital-and-multimedia-evidence/
+    detail: SWGDE
+  - id: acpo-good-practice
+    label: ACPO Good Practice Guide for Digital Evidence v5
+    url: https://www.digital-detective.net/digital-forensics-documents/ACPO_Good_Practice_Guide_for_Digital_Evidence_v5.pdf
+    detail: Association of Chief Police Officers (UK)
+  - id: forensic-notes
+    label: Forensic Notes (cryptographically timestamped examiner notes)
+    url: https://www.forensicnotes.com/
+    detail: Forensic Notes Inc.
+  - id: powershell-approved-verbs
+    label: Approved Verbs for PowerShell Commands
+    url: https://learn.microsoft.com/en-us/powershell/scripting/developer/cmdlet/approved-verbs-for-windows-powershell-commands
+    detail: Microsoft Learn
 ---
 
-<div className="not-prose flex min-h-[60vh] flex-col items-center justify-center gap-6 text-center">
-  <div className="h-12 w-12 animate-spin rounded-full border-4 border-forensic-primary/60 border-r-transparent" />
-  <div>
-    <div className="text-lg font-semibold text-forensic-text">Loading lab content…</div>
-    <div className="mt-2 text-sm text-forensic-text/60">Hold tight, this lab will be ready shortly.</div>
-  </div>
-</div>
+## Background
+
+A forensic workstation is configured very differently from a stock Windows install. Out of the box, Windows hides system files, hides file extensions, lets Defender quarantine unrecognized binaries, and puts the machine to sleep on a timer. Each of those choices is sensible for an everyday machine, but not as helpful for an examiner. Examiners spend a lot of time looking inside files Windows hides from regular users, rely on tools that often share signatures with malware, and run analyses that can stretch over many hours. A workstation tuned for casual use gets in the way of all three.
+
+The course VM has already been automated with a number of these forensic-friendly tweaks. That kind of automation is convenient, but knowing what was changed and why matters more than knowing it was done, because the same checks may come up each time you build, audit, or troubleshoot a forensic workstation. In this lab you'll audit many of these common settings, get comfortable with PowerShell for daily forensic work, and learn the basics of Timeline Explorer for triaging the CSV output that most forensic CLI tools produce.
+
+## Objectives
+
+By the end of this lab you should be able to:
+
+- Verify the forensic-friendly defaults applied to your workstation.
+- Set up a sensible case folder structure for evidence and exports.
+- Use PowerShell to perform common forensic operations on the command line.
+- Use Timeline Explorer to filter, sort, and group forensic CSV data.
+
+## Step 1: Audit your File Explorer defaults
+
+Many of the most forensically interesting files on a Windows system are the ones the OS hides by default. That includes registry hives, swap files, NTFS metadata, recycled content, and volume snapshot data. For an average user, hiding all of that is the right call. It prevents accidental deletion, modification, or movement of files the OS depends on to function. As an examiner, you need the opposite.
+
+Showing file extensions matters for the same reason. Hiding the extension is convenient for an average user, because it prevents them from accidentally changing the extension while renaming a file in Explorer. The downside is that the same convenience also lets a file named `important_document.pdf.exe` show up as `important_document.pdf`, even though its bytes identify it as an executable. That mismatch is a well-documented phishing technique<Cite id="eset-extension-phishing" /> that hidden extensions make easy to fall for.
+
+With that context in mind, verify **File Explorer** is configured to surface everything. File Explorer is the built-in Windows GUI file manager. Open it from the Start menu or press **Win+E**.
+
+On Windows 11, click the **View** button in the toolbar, hover over **Show**, and confirm both **Hidden items** and **File name extensions** are checked. That covers two of the three settings most forensic work needs. The third one, showing protected operating system files, isn't in this menu and still has to be toggled in the older Folder Options dialog.
+
+On either Windows 10 or 11, open **Options → Change folder and search options → View** and confirm the following:
+
+- **Show hidden files, folders, and drives** is selected.
+- **Hide extensions for known file types** is **unchecked**.
+- **Hide protected operating system files (Recommended)** is **unchecked**.
+- **Launch folder windows in a separate process** is **checked**.
+
+The first three settings change what File Explorer shows. The fourth changes how it runs. By default, every Explorer window shares a single `explorer.exe` process with the Start menu, taskbar, and desktop shell, which means one window hanging on a mounted image or an unresponsive network path can freeze the entire shell along with it. Checking this option gives each window its own process, so a stuck listing only takes that one window down.
+
+Once the four options are set, click **Apply to Folders** at the top of the dialog before closing. That propagates the current folder's view (column layout, sort order, view mode) to every folder of the same template type, so the layout stays consistent across the machine rather than resetting per folder.
+
+<Figure
+  src="https://placehold.co/900x520?text=Folder+Options+forensic+defaults"
+  alt="Windows Folder Options dialog on the View tab, with Show hidden files selected, Hide extensions for known file types unchecked, and Hide protected operating system files unchecked"
+  caption="Folder Options with all three forensic-relevant settings configured. Hidden + system files visible, extensions visible."
+  width={700}
+/>
+
+To see this in practice, navigate to your user profile folder at `C:\Users\<username>\` in File Explorer. With the three Folder Options settings applied above, you should now see files like `NTUSER.DAT` (the per-user registry hive), `NTUSER.DAT.LOG1`, `ntuser.ini`, and a handful of other protected files that are normally hidden from view. Under stock Windows settings, none of these would appear at all.
+
+<Figure
+  src="https://placehold.co/900x320?text=User+profile+folder+with+NTUSER.DAT+visible"
+  alt="File Explorer showing C:\Users\<username>\ with NTUSER.DAT, NTUSER.DAT.LOG1, ntuser.ini, and other protected files visible alongside the usual Documents, Downloads, and Pictures folders"
+  caption="The user profile folder with protected system files visible. NTUSER.DAT is the per-user registry hive."
+  width={800}
+/>
+
+<Question id="lab-8-1-q1" label="Q1" type="text" accept="Hide extensions for known file types, hide extensions for known file types, HIDE EXTENSIONS FOR KNOWN FILE TYPES, Hide extensions, hide extensions, Hide file extensions, hide file extensions">
+  Which Folder Options setting must be **unchecked** to surface the `.exe` in a filename like `important_document.pdf.exe`?
+
+  <Hint>Open File Explorer → Options → View tab and look near the top of the Advanced settings list.</Hint>
+  <Solution>**Hide extensions for known file types**. On a fresh Windows install this is checked, which means a file called `important_document.pdf.exe` is displayed as just `important_document.pdf`. Unchecking it surfaces the real extension, which is a non-negotiable setting on a forensic workstation since a file's actual type is part of the evidence.</Solution>
+</Question>
+
+<Question id="lab-8-1-q2" label="Q2" type="text" accept="NTUSER.DAT, ntuser.dat, NTUSER, ntuser, NTuser.dat, NTUser.dat">
+  What's the per-user registry hive filename that becomes visible in `C:\Users\<username>\` once the three Folder Options settings are applied?
+
+  <Hint>It's a `.DAT` file with an all-caps name, sitting at the root of the user's profile directory.</Hint>
+  <Solution>`NTUSER.DAT`. This is the per-user portion of the Windows registry, mounted as `HKEY_CURRENT_USER` whenever the user is logged in. On a forensic image, parsing NTUSER.DAT recovers per-user keys like RunMRU, UserAssist, recent documents, and shellbags.</Solution>
+</Question>
+
+## Step 2: Audit Windows Defender exclusions
+
+Many forensic tools can resemble malware closely enough that antivirus engines flag them. Memory acquisition, password recovery, and anti-forensics analysis all rely on techniques that overlap with malicious software or infostealers, so without explicit exclusion paths, **Windows Defender** (the built-in Windows antivirus) will quarantine parts of the toolchain and break analyses that depend on them.
+
+The course setup script registered a small set of forensic-specific exclusion paths during workstation build. To audit the current configuration, **open a PowerShell window as Administrator** and run:
+
+```powershell
+Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
+```
+
+You should see at least `C:\Forensics\Tools\` and the course Exercises directory in the output<Cite id="get-mppreference" />. You may also see tool-specific exclusions alongside those. Oftentimes when installing additional forensic tools or suites, the install wizard asks to exclude (or automatically excludes) its installation path for this exact reason.
+
+<Figure
+  src="https://placehold.co/900x280?text=Defender+exclusion+paths"
+  alt="PowerShell window showing Get-MpPreference Select-Object ExclusionPath output with C:\Forensics\Tools\ and the iwf Exercises directory listed"
+  caption="The registered Defender exclusions listed via Get-MpPreference."
+  width={800}
+/>
+
+Notice that as best practice, the exclusions are deliberately scoped to the tools and exercise directories. The rest of the disk still gets full Defender protection. Excluding `C:\` entirely would be a real security mistake on any machine.
+
+You'll also want to know how to add and remove exclusions yourself, since you'll occasionally need to register a new tool's path or pull one out. The relevant cmdlets are `Add-MpPreference` and `Remove-MpPreference`, both with an `-ExclusionPath` parameter. 
+
+Both cmdlets modify Defender settings, so they need to run from the same **elevated PowerShell session** you already have open. If that window is no longer open, reopen PowerShell as administrator before running the following commands.
+
+Add a folder to the exclusion list:
+
+```powershell
+Add-MpPreference -ExclusionPath 'C:\Forensics\Demo\'
+```
+
+Confirm it appears:
+
+```powershell
+Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
+```
+
+Then remove it again:
+
+```powershell
+Remove-MpPreference -ExclusionPath 'C:\Forensics\Demo\'
+```
+
+Re-running the `Get-MpPreference` check should show the path is gone.
+
+<Question id="lab-8-1-q3" label="Q3" type="text" accept="Add-MpPreference, add-mppreference, ADD-MPPREFERENCE, AddMpPreference, addmppreference">
+  Which cmdlet adds a new path to the Windows Defender exclusion list?
+
+  <Hint>Same Verb-Noun family as the cmdlet that lists exclusions, but with the verb that means "create" or "append."</Hint>
+  <Solution>`Add-MpPreference`. It is used with `-ExclusionPath '<path>'` to register a new directory. The matching cmdlet for removing a path is `Remove-MpPreference`, and `Get-MpPreference` reports the current state.</Solution>
+</Question>
+
+## Step 3: Audit power settings
+
+Forensic work involves operations that routinely run for long hours rather than minutes. Hashing a multi-TB image, parsing the MFT off a populated drive, or generating a timeline can all easily exceed the sleep timeout a default Windows install applies. If the workstation drops into sleep or hibernation partway through one of these, the output you get back may be interrupted at an unpredictable point and cannot be relied on. A forensic workstation should be configured to stay awake indefinitely, with both sleep timers and hibernation disabled outright.
+
+The tool for inspecting and configuring Windows power settings from the command line is **powercfg**, a utility built into the OS<Cite id="powercfg" />.
+
+To read the current power configuration, open a PowerShell window and run:
+
+```powershell
+powercfg /q SCHEME_CURRENT SUB_SLEEP | Select-String 'Power Setting GUID|Current AC|Current DC'
+```
+
+The `powercfg /q` command queries the power configuration. `SCHEME_CURRENT` scopes the query to the active power plan, and `SUB_SLEEP` narrows further to its Sleep subgroup.
+
+You're looking for the **Sleep after** and **Hibernate after** entries to both show `0x00000000` for AC and DC, which means the timer is disabled outright rather than triggered after some interval. A non-zero value is a timer duration in seconds, meaning the machine will sleep or hibernate after that interval.
+
+To confirm hibernation specifically:
+
+```powershell
+powercfg /a
+```
+
+That lists which sleep states are currently available. On a forensic workstation, Hibernate should appear in the not-available section. Since you're running on a VM, the reason underneath will read `The system firmware does not support hibernation` because the hypervisor doesn't pass hibernation through to the guest.
+
+To configure these settings yourself, you can run the following from an elevated PowerShell window:
+
+```powershell
+powercfg /change standby-timeout-ac 0
+powercfg /change standby-timeout-dc 0
+powercfg /change monitor-timeout-ac 0
+powercfg /change monitor-timeout-dc 0
+powercfg /h off
+```
+
+The first pair zeros the standby timer on AC and DC power, matching what you should see in the `powercfg /q` audit output above. The next pair zeros the monitor blank-out timer on AC and DC. The monitor turning off wouldn't interrupt a running operation, but keeping the screen on means you can glance at the progress of a long-running tool without having to wiggle the mouse first.
+
+The last command disables hibernation entirely, which removes Hibernate from `powercfg /a`'s availability list and deletes the on-disk hibernation file (`hiberfil.sys`) in the process, freeing several GB of disk space.
+
+<Question id="lab-8-1-q4" label="Q4" type="text" accept="0x00000000, 0X00000000, 0">
+  What hex value appears in the `Current AC Power Setting Index` line when the standby or hibernate timer is disabled outright?
+
+  <Hint>Look at the output of `powercfg /q SCHEME_CURRENT SUB_SLEEP | Select-String 'Power Setting GUID|Current AC|Current DC'` for the **Sleep after** and **Hibernate after** entries.</Hint>
+  <Solution>`0x00000000`. A value of 0 in either the AC or DC index means the timer is disabled and the workstation won't sleep or hibernate after that interval. Any non-zero value is a timer duration in seconds.</Solution>
+</Question>
+
+## Step 4: Audit timezone settings
+
+Timestamps are everywhere in forensic work, from filesystem metadata to event logs to registry keys. If they come from sources running on different timezones, or worse, sources running on local time with no timezone recorded, comparing them reliably becomes a guessing game. The fix is to settle on a single timezone for your workstation and record it everywhere a timestamp gets written down. The conventional choice is **UTC** (Coordinated Universal Time), the global time reference every other timezone is defined as an offset from.
+
+Luckily, most artifacts you'll work with already record their timestamps in UTC internally. NTFS metadata, modern Windows event logs, most browser history records, and most server-side log formats all store UTC and only translate to local time for display. Where it gets messy is the handful of formats that still record in the local time of whatever machine wrote them. In those cases, the entries have to be reconciled against your UTC-normalized timeline during analysis. 
+
+That's unavoidable and a normal part of working with mixed-format evidence. Running the workstation itself on UTC at least keeps the translation one-directional. You only ever convert from a source's local time into UTC, and your own notes and exports never add a third timezone into the pile.
+
+To check what timezone your workstation is currently set to, run:
+
+```powershell
+Get-TimeZone
+```
+
+The output shows the timezone's display name, its standard-time abbreviation, and its current UTC offset<Cite id="get-timezone" />. Confirm it matches what you expect.
+
+To set the workstation to UTC explicitly, run from an elevated PowerShell window:
+
+```powershell
+Set-TimeZone -Id "UTC"
+```
+
+Whatever timezone you settle on, record it in your case notes next to any timestamp you write down. That way every timestamp in your notes is unambiguous on its own, without the reader needing to know which workstation it came from.
+
+<Question id="lab-8-1-q5" label="Q5" type="text" accept="Get-TimeZone, get-timezone, GET-TIMEZONE, GetTimeZone, gettimezone">
+  Which cmdlet reports the workstation's currently configured timezone?
+
+  <Hint>Verb-Noun. The verb is the standard one for reading state.</Hint>
+  <Solution>`Get-TimeZone`. It returns the timezone's display name, standard-time abbreviation, and current UTC offset. The matching cmdlet to change it is `Set-TimeZone`.</Solution>
+</Question>
+
+## Step 5: Audit Windows Update policy
+
+Automatic Windows Updates can be a problem on a forensic workstation. They can reboot the machine in the middle of a long-running operation and lose hours of work, often without leaving a clean indication in the output that the run was interrupted. Updates can also alter system file timestamps in unexpected ways or change Defender behavior between revisions, leaving earlier analyses harder to reproduce. As best practice, apply system updates *deliberately* between cases instead of leaving the automatic schedule on.
+
+A group policy registry value on the workstation disables the automatic install behavior. To audit the current state, run from any PowerShell window:
+
+```powershell
+Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU' -Name NoAutoUpdate -ErrorAction SilentlyContinue
+```
+
+You're looking for `NoAutoUpdate : 1`<Cite id="windows-update-au-policy" />. Setting this value to 1 tells Windows Update to never install updates without explicit user action. Updates can still be checked for and downloaded through the Settings app, but they wait there until you choose to apply them.
+
+<Figure
+  src="https://placehold.co/900x220?text=NoAutoUpdate+registry+value"
+  alt="PowerShell output showing Get-ItemProperty result with NoAutoUpdate equal to 1 under HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
+  caption="The NoAutoUpdate policy value reading 1, confirming automatic install of updates is disabled."
+  width={800}
+/>
+
+This isn't the same as disabling Windows Update entirely. The update mechanism keeps running in the background and the change only removes the automatic install step, so updates never apply themselves while you're working. To apply pending updates between cases, open **Settings → Windows Update** and trigger the install manually.
+
+## Step 6: Audit OneDrive presence
+
+**OneDrive** is a default Windows feature that syncs user folders to a Microsoft cloud tenant tied to whichever account is signed in. On a personal machine that's a convenient free-backup feature. On a forensic workstation it is a chain-of-custody disaster waiting to happen. The moment an examiner drops an evidence file into a synced folder "just for a second" while moving it elsewhere, OneDrive could begin uploading a copy to a remote service that's no longer under the examiner's direct control.
+
+In most cases, OneDrive should be uninstalled entirely on a forensic workstation. Audit the current state:
+
+```powershell
+Get-Process -Name OneDrive -ErrorAction SilentlyContinue
+Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name OneDrive -ErrorAction SilentlyContinue
+```
+
+<Figure
+  src="https://placehold.co/900x260?text=OneDrive+audit+empty+output"
+  alt="PowerShell window showing Get-Process OneDrive and Get-ItemProperty for the Run key both returning no output, indicating OneDrive is not running and not set to auto-start"
+  caption="Both audit commands return nothing, confirming OneDrive is neither running nor set to launch at login."
+  width={800}
+/>
+
+Both commands should return nothing. The first confirms no OneDrive process is currently running. The second confirms OneDrive isn't registered to start automatically at user login.
+
+If either command returns output, you can uninstall OneDrive from an elevated PowerShell window by running:
+
+```powershell
+Stop-Process -Name 'OneDrive' -Force -ErrorAction SilentlyContinue
+Start-Process -FilePath "$env:SystemRoot\System32\OneDriveSetup.exe" -ArgumentList '/uninstall' -Wait -NoNewWindow
+```
+
+The first line stops any running OneDrive process so the uninstaller can replace the binary cleanly. The second runs the OneDrive installer with its `/uninstall` flag and waits for it to finish, which is the documented way to remove OneDrive<Cite id="onedrive-uninstall" />.
+
+You may notice that uninstalling OneDrive deliberately leaves residual files behind under `%LOCALAPPDATA%\Microsoft\OneDrive` (settings, logs, cached binaries) even after a clean uninstall.
+
+<Callout type="warning" title="Windows Updates can bring OneDrive back">
+  Cumulative updates and major Windows feature releases have a history of reinstalling OneDrive on machines where it was previously removed. Re-run the audit after any large update, and re-run the uninstall block if it has returned.
+</Callout>
+
+## Step 7: Audit long path support
+
+Windows historically capped file paths at 260 characters, a limit baked into the legacy Win32 file APIs. That's fine for everyday user files. It is not fine for forensic work, where you'll routinely encounter triage images or paths like `C:\Cases\CASE-001\evidence\image.E01.mounted\Users\jsmith\AppData\Roaming\...\artifact.bin` that well exceed 260 characters. Tools written against the legacy APIs will silently fail to open files past that length, or worse, will silently truncate the path and operate on a different file than the one you meant.
+
+Modern Windows offers an opt-in registry flag that lifts this limit system-wide for applications that declare long-path awareness in their manifest. Audit the setting:
+
+```powershell
+Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled
+```
+
+You should see `LongPathsEnabled : 1`<Cite id="long-paths-enabled" />. With that flag set, applications built with long-path awareness (most modern forensic tools, plus PowerShell itself) can work with paths longer than 260 characters. Legacy applications that haven't been updated still hit the cap, but the ceiling is lifted for everything that has been.
+
+<Figure
+  src="https://placehold.co/900x220?text=LongPathsEnabled+registry+value"
+  alt="PowerShell output showing Get-ItemProperty result with LongPathsEnabled equal to 1 under HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem"
+  caption="LongPathsEnabled reading 1, confirming the OS supports paths longer than 260 characters for path-aware applications."
+  width={800}
+/>
+
+To enable it yourself, run from an elevated PowerShell window:
+
+```powershell
+Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled -Value 1 -Type DWord
+```
+
+The change applies to processes started after the value is set. Anything already running keeps the old behavior until it restarts.
+
+## Step 8: Set up a case folder structure
+
+You'll handle many cases over time, sometimes more than one in parallel and often of very different types. Using a consistent folder layout across every case keeps the workstation organized as the caseload grows. Without a convention, each case ends up with an ad-hoc layout, and basic decisions about where things go have to be settled fresh each time.
+
+There's no specific standard or scheme you must follow here, unless your organization's internal processes demand one. The major standards in the field<Cite id="nist-800-86" /><Cite id="swgde-archiving" /> prescribe principles for preserving evidence integrity and maintaining an audit trail, but they deliberately leave the actual folder layout up to the lab. The only important thing is to stay organized and consistent across every case, so the on-disk structure stays predictable as the caseload grows.
+
+The layout below is one defensible starting point informed by what those standards expect a complete case record to contain. To create the case folder structure, open PowerShell and run:
+
+```powershell
+$caseId = 'CASE-001'
+$caseRoot = "C:\Cases\$caseId"
+foreach ($sub in 'intake','evidence','exports','notes','reports') {
+    New-Item -ItemType Directory -Path (Join-Path $caseRoot $sub) -Force | Out-Null
+}
+Get-ChildItem $caseRoot
+```
+
+This creates the case root under `C:\Cases\$caseId\` (`CASE-001`) with five subfolders inside.
+
+<Figure
+  src="https://placehold.co/900x320?text=Case+folder+structure"
+  alt="PowerShell Get-ChildItem output for C:\Cases\CASE-001\ showing five subdirectories: intake, evidence, exports, notes, reports"
+  caption="A per-case directory layout with five subfolders. The same structure is used for every case."
+  width={800}
+/>
+
+What each subfolder is for:
+
+- **`intake\`** holds the case's paper trail, including the chain-of-custody log and any intake or referral paperwork received with the evidence<Cite id="swgde-archiving" />.
+- **`evidence\`** holds the original images and acquisitions as received, along with their matching hash files (`image.E01.txt` and similar). These files stay unmodified after they land, with any analysis happening on copies pulled into `exports\`<Cite id="iso-27037" /><Cite id="acpo-good-practice" />.
+- **`exports\`** holds files extracted from or carved out of the evidence. These are derivatives, not originals.
+- **`notes\`** holds examiner notes and a running journal of the work as it happens. Plain text works well, but many examiners reach for richer tools like Obsidian (Markdown-backed) or Notion. Be mindful with anything that syncs to a cloud you don't control, since case notes shouldn't leave your custody. For court-bound work, dedicated tools like **Forensic Notes**<Cite id="forensic-notes" /> exist to provide cryptographically timestamped, tamper-evident entries.
+- **`reports\`** holds the final write-up along with any drafts along the way.
+
+The value of this structure comes from applying it the same way every time. Once a case is underway, everything produced for it lives inside the case folder, and the layout stops being something additional you have to think about.
+
+## Step 9: PowerShell for forensic work
+
+PowerShell is Microsoft's modern command-line shell for Windows. It's the default shell on every modern Windows install and the working interface for most forensic CLI tools on the platform. Unlike older shells that pipe plain text between commands, PowerShell pipelines carry structured objects, which makes filtering and transforming data along the pipeline cleaner than the `cmd` or `bash` equivalent<Cite id="powershell-getting-started" />.
+
+### Transcript logging
+
+If you want a complete record of what ran during a session, PowerShell offers a simple way to capture it to a log. The `Start-Transcript` cmdlet<Cite id="start-transcript" /> writes every command and its output to the file you specify, which becomes part of the case's audit trail.
+
+```powershell
+Start-Transcript -Path "C:\Cases\CASE-001\notes\session-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+```
+
+That writes a timestamped session log into the case's `notes\` folder. From this point on, every command and its output is captured. When you're done with the session, you can end the transcript with:
+
+```powershell
+Stop-Transcript
+```
+
+<Figure
+  src="https://placehold.co/900x340?text=Start-Transcript+session+log"
+  alt="PowerShell window showing Start-Transcript confirming the log file path, a few commands being captured during the session, and Stop-Transcript ending the recording"
+  caption="A transcript runs from Start-Transcript to Stop-Transcript. Every command and its output between the two ends up in the timestamped log file under the case's notes folder."
+  width={800}
+/>
+
+The captured transcript offers lasting value across a case. For example:
+
+- **Chain of custody**: the transcript becomes part of the case record, proving what was run, when, and against what.
+- **Reproducibility**: anyone re-examining the work later can replay the commands in order.
+- **Diagnostics**: when a tool produces unexpected output, you can scroll back and see the exact command that produced it.
+
+You can enable PowerShell transcription either per-session like the example above, or system-wide through Group Policy. With the Group Policy approach, every PowerShell session on the machine is captured to a configured output directory, regardless of whether anyone explicitly ran `Start-Transcript`.
+
+The setting lives under **Computer Configuration → Administrative Templates → Windows Components → Windows PowerShell → Turn on PowerShell Transcription**, which writes the same configuration to `HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription` under the hood.
+
+Each approach has tradeoffs. The per-session approach gives you granular control and lets the output land in the active case's folder, but it depends on the examiner remembering to run the command and only covers interactive sessions they explicitly start. 
+
+The Group Policy approach captures everything automatically, but writes all transcripts to one central directory rather than per-case folders. It also creates a leakage risk for case-sensitive work, since anything echoed to the console in PowerShell ends up in the central directory, which may not have the same access controls as the case folder that material belongs to. 
+
+<Question id="lab-8-1-q6" label="Q6" type="text" accept="Start-Transcript, start-transcript, START-TRANSCRIPT, StartTranscript, starttranscript">
+  Which cmdlet captures every command you type and every line of output during a PowerShell session to a log file?
+
+  <Hint>It pairs with `Stop-Transcript` to bookend the recording.</Hint>
+  <Solution>`Start-Transcript`. It writes a complete log of the interactive PowerShell session (commands typed plus their output) to the path passed via `-Path`. Pair it with `Stop-Transcript` when the session is done.</Solution>
+</Question>
+
+### Cmdlets and aliases
+
+PowerShell commands are called **cmdlets** and follow a strict **Verb-Noun** naming convention<Cite id="powershell-approved-verbs" />. `Get-` retrieves, `Set-` modifies, `New-` creates, `Remove-` deletes. That naming alone makes the cmdlet vocabulary largely self-documenting.
+
+The most basic cmdlet to know is `Get-ChildItem`, which lists items in a directory:
+
+```powershell
+Get-ChildItem
+```
+
+That's the PowerShell equivalent of `dir` on `cmd.exe` or `ls` on Linux. Both `dir` and `ls` are in fact registered aliases for `Get-ChildItem`. You can confirm this by running:
+
+```powershell
+Get-Alias dir
+Get-Alias ls
+```
+
+This means that running either `dir` or `ls` produces the same result as running `Get-ChildItem` directly. Aliases in PowerShell are alternative names that resolve to the same underlying cmdlet. Many of them exist to give users coming from `cmd.exe` or from Linux and macOS shells familiar commands without forcing them to learn the Verb-Noun vocabulary up front. They're convenient at the interactive prompt but uncommon in scripts, where the full cmdlet name keeps the intent unambiguous.
+
+To discover what other cmdlets are available, `Get-Command` accepts wildcards:
+
+```powershell
+Get-Command Get-*
+```
+
+That returns every cmdlet whose name starts with `Get-`. Combined with the Verb-Noun convention, this is a fast way to find what's available without having to memorize anything in advance.
+
+<Figure
+  src="https://placehold.co/900x420?text=Get-Command+Get-*+output"
+  alt="PowerShell window showing Get-Command Get-* output listing cmdlets like Get-Acl, Get-Alias, Get-ChildItem, Get-Content, Get-Date, Get-Help, Get-Process, with CommandType, Name, Version, and Source columns"
+  caption="Get-Command Get-* listing the Get- family of cmdlets available in the current session, with their CommandType, Version, and source module."
+  width={800}
+/>
+
+<Question id="lab-8-1-q7" label="Q7" type="text" accept="Get-Content, get-content, GET-CONTENT, GetContent, getcontent">
+  Following the same alias pattern as `dir` and `ls`, which cmdlet do `cat` (Unix) and `type` (cmd) both alias to?
+
+  <Hint>Verb-Noun. The verb is the standard one for reading. `Get-Alias cat` will confirm at the prompt.</Hint>
+  <Solution>`Get-Content`. It reads the content of a file (and other items) from disk and emits it down the pipeline. `cat` from Unix and `type` from cmd both resolve to it, the same way `ls` and `dir` resolve to `Get-ChildItem`.</Solution>
+</Question>
+
+### Getting help
+
+Fortunately, PowerShell is one of the most thoroughly documented shells out there. Every cmdlet ships with built-in help accessible through `Get-Help`:
+
+```powershell
+Get-Help Get-ChildItem
+```
+
+If you're prompted to run `Update-Help`, you can do so by answering Yes at the prompt. The download takes a few minutes and pulls the latest help content from Microsoft, after which `Get-Help <anything>` works offline.
+
+<Figure
+  src="https://placehold.co/900x440?text=Get-Help+Get-ChildItem+output"
+  alt="PowerShell window showing Get-Help Get-ChildItem output with the NAME, SYNOPSIS, SYNTAX, DESCRIPTION, and RELATED LINKS sections"
+  caption="Get-Help output for Get-ChildItem. The same section structure is used for every cmdlet, which makes the help format predictable once you've read one."
+  width={800}
+/>
+
+### The pipeline
+
+The pipeline is one of the bigger architectural differences between PowerShell and most other shells. Where `cmd.exe` or `bash` pipe text between commands, leaving downstream tools to parse it back into something structured, PowerShell pipelines pass structured objects directly. 
+
+Each cmdlet receives objects with named properties from the previous one, which means filtering or selecting fields is direct rather than a text-parsing exercise. Here's a typical pipeline that lists every file in `C:\Windows\System32` larger than 5MB and returns only a few notable properties:
+
+```powershell
+Get-ChildItem 'C:\Windows\System32' -File |
+    Where-Object Length -gt 5MB |
+    Select-Object Name, Length, LastWriteTime
+```
+
+<Figure
+  src="https://placehold.co/900x360?text=System32+pipeline+output"
+  alt="PowerShell window showing the Get-ChildItem to Where-Object to Select-Object pipeline output, displaying a table of files in C:\Windows\System32 larger than 5MB with Name, Length, and LastWriteTime columns"
+  caption="The pipeline output, narrowed to files in System32 larger than 5MB and limited to the three columns the final stage requested."
+  width={800}
+/>
+
+This pipeline contains three cmdlets, each performing its own job. 
+
+- `Get-ChildItem` produces file objects from `C:\Windows\System32`. 
+- `Where-Object` filters those objects down to ones whose `Length` property exceeds 5MB. 
+- `Select-Object` keeps only the properties we care about. 
+
+Most pipelines in forensic PowerShell follow this pattern, with each stage transforming or filtering the objects coming through.
+
+### Capturing output to a file
+
+PowerShell offers two main ways to capture the result of a command to a file. The first is the `>` operator (a redirection operator used in many other shells), which redirects whatever would have printed to the screen into a file instead. The following command lists every running process and writes the output to `processes.txt` in the case's `notes\` folder:
+
+```powershell
+Get-Process > "C:\Cases\CASE-001\notes\processes.txt"
+```
+
+That writes the formatted text output to the target file, overwriting any existing contents. The related `>>` operator does the same thing but appends to the file rather than overwriting it. 
+
+However, the `>` operator captures only the text PowerShell would have rendered, not the underlying object structure, so anything you plan to feed into another tool should generally go through `Export-Csv` instead.
+
+The `Export-Csv`<Cite id="export-csv" /> cmdlet writes pipeline objects to a CSV file, with each object becoming a row and its properties becoming columns. The following command lists every file in `C:\Windows\System32`, picks the same properties as before, and writes the result to `system32_files.csv` in the case's `exports\` folder.
+
+```powershell
+Get-ChildItem 'C:\Windows\System32' -File |
+    Select-Object Name, Length, LastWriteTime |
+    Export-Csv -Path "C:\Cases\CASE-001\exports\system32_files.csv" -NoTypeInformation
+```
+
+<Figure
+  src="https://placehold.co/900x360?text=Export-Csv+pipeline+output"
+  alt="PowerShell window showing the Get-ChildItem Select-Object Export-Csv pipeline running and the resulting system32_files.csv first few lines via Get-Content"
+  caption="The Get-ChildItem to Export-Csv pipeline producing system32_files.csv."
+  width={800}
+/>
+
+The `-NoTypeInformation` flag strips the `#TYPE` header that older PowerShell versions injected and that most CSV consumers don't want. You can confirm the resulting CSV at `C:\Cases\CASE-001\exports\system32_files.csv` by reading it in the console with `Get-Content`, opening it in Notepad, or better yet loading it in **Timeline Explorer**.
+
+<Question id="lab-8-1-q8" label="Q8" type="text" accept="Export-Csv, export-csv, EXPORT-CSV, ExportCsv, exportcsv">
+  Which cmdlet writes pipeline objects to a CSV file?
+
+  <Hint>The cmdlet's name is in its job. It exports to CSV.</Hint>
+  <Solution>`Export-Csv`. It takes structured objects coming down the pipeline and serializes them to CSV, with each object becoming a row and its properties becoming columns. The `-NoTypeInformation` flag strips the `#TYPE` header that older PowerShell versions injected.</Solution>
+</Question>
+
+## Step 10: Timeline Explorer for CSV analysis
+
+Almost every forensic CLI tool you'll encounter outputs its data as CSV. **Excel** handles small CSVs and includes plenty of data manipulation features, but it tends to struggle past a million rows and is generally a bad fit for forensic data. **Timeline Explorer**<Cite id="timeline-explorer" />, by *Eric Zimmerman*, is purpose-built for forensic CSV data, including the large outputs Excel can't keep up with.
+
+### Generating a CSV with PECmd
+
+To produce a CSV worth analyzing, run **PECmd** against the workstation's Prefetch directory.
+
+**Prefetch** is a Windows performance feature first introduced in Windows XP and still present in modern Windows. The Prefetch service watches what an application loads during its first few seconds of execution and writes that information to a small binary file with the `.pf` extension under `C:\Windows\Prefetch\`. The next time that application launches, Windows uses the cached information to pull those files into memory ahead of time, which speeds up startup. 
+
+Each Prefetch file records the executable's **name and full path**, a **hash** of where it lives on disk, **how many times** it has been run, the **timestamps of the last eight executions**, and the **list of files** the program touched while loading.
+
+**PECmd** stands for **Prefetch Explorer Command line** and is one of Eric Zimmerman's tools. It reads the binary `.pf` format and parses the data as CSV (or JSON) for analysis, either against a single file or against an entire Prefetch directory in one pass.
+
+The `C:\Windows\Prefetch\` directory has restrictive ACLs that limit read access to SYSTEM and Administrators, so PECmd has to run from an elevated session to enumerate the files. To parse every Prefetch file on the workstation and write the result into the case's `exports\` folder, **open PowerShell as Administrator** and run:
+
+```powershell
+PECmd.exe -d C:\Windows\Prefetch --csv C:\Cases\CASE-001\exports\ -q
+```
+
+<Figure
+  src="https://placehold.co/900x420?text=PECmd+output"
+  alt="PowerShell window showing PECmd output: version banner, command-line echo, the 'Looking for prefetch files in C:\Windows\Prefetch' line, a Found N Prefetch files count, and a final 'Processed N out of N files' summary"
+  caption="PECmd parsing every .pf file under C:\Windows\Prefetch and writing two CSV files into the case's exports folder: a per-file summary and a timeline view."
+  width={800}
+/>
+
+The `-d` flag points PECmd at a directory of Prefetch files to process. `--csv` writes the parsed output as CSV files into the folder you specify. `-q` enables quiet mode. PECmd produces **two output files**: a **per-file summary** and a **timeline view** with one row per recorded execution.
+
+<Question id="lab-8-1-q9" label="Q9" type="text" accept="-d, /d, d">
+  What flag on PECmd points it at a directory of Prefetch files to process?
+
+  <Hint>Single letter. Look at the command in this step's PECmd invocation.</Hint>
+  <Solution>`-d`. It tells PECmd to walk the directory you pass it and parse every Prefetch file inside, rather than parsing a single file specified by `-f`. The matching output flag is `--csv` for CSV output (or `--json` for JSON).</Solution>
+</Question>
+
+### Loading the CSV in Timeline Explorer
+
+Load the timeline CSV into Timeline Explorer (`<timestamp>_PECmd_Output_Timeline.csv`). The `.csv` extension is already associated with Timeline Explorer on the workstation, so double-clicking the file from File Explorer launches the tool with it loaded. You can also launch Timeline Explorer from the Start menu and use **File → Open**, or drag the CSV directly onto the window. Each file you load gets its own tab.
+
+<Figure
+  src="https://placehold.co/900x520?text=Timeline+Explorer+loaded"
+  alt="Timeline Explorer with the PECmd timeline CSV freshly loaded, all rows visible, columns for ExecutableName, RunTime, SourceFilename and other Prefetch metadata, the file path in the bottom-left status bar, and the total row count in the bottom-right"
+  caption="Timeline Explorer immediately after loading the PECmd timeline CSV. Each Prefetch execution is one row, with columns for the executable name, run time, and the rest of the parsed metadata."
+  width={800}
+/>
+
+### Filtering rows
+
+The fastest way to narrow a large dataset is to filter on a column. Every column in Timeline Explorer has a filter row directly beneath its header. Click into the filter row for the column you want to filter on, type a substring, and press Enter, and the grid hides any row whose value in that column doesn't match. With the PECmd timeline data, filtering the `ExecutableName` column for `notepad` is enough to narrow the entire dataset down to just Notepad's recorded executions.
+
+Each active filter shows up as a chip along the bottom of the window. On the chip, the **Edit filter** button changes the criteria, the **X** removes the filter entirely, and the checkbox between them temporarily disables the filter without discarding it. The disable-checkbox is the convenient one when you want to peek at the full dataset and reapply the same filter afterward without retyping it.
+
+For a column where you don't know the exact string to filter on, the small funnel icon next to the column name opens a list of every unique value present in that column. That doubles as a quick way to see what distinct values a field actually contains before you decide what to filter for.
+
+<Figure
+  src="https://placehold.co/900x520?text=Timeline+Explorer+filtered"
+  alt="Timeline Explorer with a column filter applied to ExecutableName for the substring 'notepad', only Notepad-related rows visible, the active filter chip along the bottom of the window, and the status bar showing the reduced visible row count"
+  caption="A column filter applied to ExecutableName. Only rows whose ExecutableName contains 'notepad' remain visible, and the active filter chip sits along the bottom of the window."
+  width={800}
+/>
+
+### Search mode
+
+The **Search options** button near the top right toggles between two modes. Filter is the default and is what you've been using so far. Search behaves differently. It keeps every row visible, highlights the matches in place, and lets you step between them with the arrow keys. The visible-row count in the status bar drops in Filter mode and stays unchanged in Search mode, which is the fastest way to tell which mode is currently active.
+
+The search box itself accepts space-separated terms, with `+` for AND and `-` for NOT. Entering `.exe +CON` matches rows that contain both `.exe` and `CON`, and `powershell -ise` matches rows that contain `powershell` but not `ise`. The **?** icon next to the search options opens a reference for the full syntax.
+
+<Figure
+  src="https://placehold.co/900x520?text=Timeline+Explorer+search+mode"
+  alt="Timeline Explorer with Search mode active, every row still visible in the grid, matching rows highlighted in place, and the visible-row count in the status bar unchanged from the full dataset"
+  caption="Search mode keeps every row visible and highlights matches in place. The visible-row count in the status bar stays unchanged from the full dataset, which is what tells you you're in Search rather than Filter."
+  width={800}
+/>
+
+### Grouping by a column
+
+Above the column headers is a thin bar that reads **"Drag a column header here to group by that column"**. Drag any column header into that bar and Timeline Explorer collapses the grid into groups by that column's values, with a count beside each group header. With the PECmd timeline data, grouping by `ExecutableName` collapses every recorded execution of the same program into one expandable header showing how many times that program ran. To undo the grouping, drag the column back down into the grid, or right-click the column in the group bar and choose **UnGroup**.
+
+<Figure
+  src="https://placehold.co/900x520?text=Timeline+Explorer+grouped+by+ExecutableName"
+  alt="Timeline Explorer with the PECmd timeline CSV grouped by ExecutableName, showing collapsed groups with run counts beside each executable name"
+  caption="The same CSV grouped by ExecutableName. Each group header collapses every execution of one program into a single row with the count beside it."
+  width={800}
+/>
+
+### The status bar
+
+The status bar at the bottom of the window ties the rest together. The left half shows the full path of the currently loaded CSV. The right half shows the total row count next to the visible row count. The visible count is the fastest way to confirm a filter is narrowing the dataset to what you expected, and the gap between visible and total is what tells you a filter is active at all.
+
+<Figure
+  src="https://placehold.co/900x140?text=Timeline+Explorer+status+bar"
+  alt="Close-up of Timeline Explorer's status bar showing the full loaded file path on the left and the total versus visible row counts on the right"
+  caption="Close-up of the status bar. Loaded file path on the left, total versus visible row counts on the right."
+  width={800}
+/>
+
+## Wrapping Up
+
+You're now running on a workstation that's configured for forensic work. The system-level defaults have been tuned for examination. You have the ability to organize cases with structure rather than ad-hoc arrangements. The PowerShell and Timeline Explorer basics carry forward to most of the artifact formats you'll encounter in later analysis work. 
+
+None of this is particularly glamorous, but it's the kind of setup that pays off the first time a case spans weeks of work or has to be handed off to someone else.
