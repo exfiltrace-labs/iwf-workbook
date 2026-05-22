@@ -4,14 +4,10 @@ moduleId: module-7
 labNumber: Lab 7.1
 title: Windows Artifact Hunting
 order: 1
-readTime: 45 minutes
+readTime: 60 minutes
 difficulty: beginner
-description: Mount a Windows forensic image and use Eric Zimmerman's tools to locate one example of each major artifact category - registry, Prefetch, LNK files, Recycle Bin, and USB device history.
+description: Mount a forensic triage image and use a number of parsing tools to surface evidence of system identity, program execution, file access, deletion, and external device activity.
 references:
-  - id: aim
-    label: Arsenal Image Mounter
-    url: https://arsenalrecon.com/products/arsenal-image-mounter
-    detail: Arsenal Recon
   - id: zimmerman-tools
     label: Eric Zimmerman's tools
     url: https://ericzimmerman.github.io/
@@ -28,12 +24,499 @@ references:
     label: Windows Recycle Bin format ($I/$R)
     url: https://en.wikipedia.org/wiki/Trash_(computing)#Microsoft_Windows
     detail: Wikipedia
+  - id: evidence-of
+    label: Windows Forensic Analysis poster
+    url: https://www.sans.org/posters/windows-forensic-analysis
+    detail: SANS
+  - id: kape
+    label: KAPE (Kroll Artifact Parser and Extractor)
+    url: https://www.kroll.com/en/services/cyber-risk/incident-response-litigation-support/kroll-artifact-parser-extractor-kape
+    detail: Kroll
 ---
 
-<div className="not-prose flex min-h-[60vh] flex-col items-center justify-center gap-6 text-center">
-  <div className="h-12 w-12 animate-spin rounded-full border-4 border-forensic-primary/60 border-r-transparent" />
-  <div>
-    <div className="text-lg font-semibold text-forensic-text">Loading lab content…</div>
-    <div className="mt-2 text-sm text-forensic-text/60">Hold tight, this lab will be ready shortly.</div>
-  </div>
-</div>
+## Background
+
+A Windows endpoint generates an enormous volume of forensic evidence simply by operating. Some of those traces come from the operating system itself recording its own work. Others are byproducts of user activity. A forensic examination of a Windows system is largely the work of finding those traces, understanding what each one proves, and assembling them into a coherent narrative.
+
+This lab gets you oriented in where the most important traces live and what they look like when you pull them off disk. You're going to mount a KAPE triage collection of a real Windows system and walk through the major artifact categories one at a time, finding a concrete example of each. Each category maps to a kind of activity it serves as evidence of, which is why the standard mental model is called the "Evidence Of..." framework<Cite id="evidence-of" />.
+
+## Objectives
+
+By the end of this lab you should be able to:
+
+- Mount a KAPE triage VHDX of a Windows system on the analyst workstation.
+- Determine the source system's Windows version from the collected `SOFTWARE` registry hive.
+- Locate and identify Prefetch files as evidence of program execution.
+- Locate and identify LNK files in `Recent\` as evidence of file/folder opening.
+- Locate Recycle Bin `$I` / `$R` pairs as evidence of deleted items.
+- Trace USB device history through `SYSTEM\Enum\USBSTOR` and `setupapi.dev.log`.
+
+## Setup: Mount the image
+
+**KAPE**<Cite id="kape" /> is the most widely-used DFIR triage tool in the industry, written by Eric Zimmerman and maintained by Kroll. In modern incident response, full bit-for-bit disk images are usually a deliberate escalation, not the default. The increasingly modern approach is a **triage collection**. On a typical Windows endpoint, roughly one percent of the files hold 99 percent of what an investigator looks for. Triage collection targets that one percent directly, so you get usable evidence in the time it would take a full disk image to barely start copying. 
+
+KAPE reads in a defined list of forensically-relevant paths (targets) and copies the matching files into a portable container, preserving original timestamps, NTFS metadata, and alternate data streams. The result is small enough to ship over the network in minutes, fast enough to capture from a live machine without taking it offline, and sufficient to answer most artifact-level questions. 
+
+That last property is what makes triage practical at scale. Imaging 50 endpoints in a compromise hunt is rarely feasible. Collecting a triage container from each is routine. Full disk images come into play when triage isn't enough, like recovering deleted content from unallocated space or chasing malware that hides outside the known paths.
+
+What you're about to mount is one such KAPE triage collection, packaged as a virtual hard disk file. The zip lives at `C:\Forensics\Exercises\iwf\Artifact_Hunting\windows_artifacts.zip`.
+
+Open PowerShell **as Administrator**. The rest of this lab runs from that prompt. Confirm the zip is in place:
+
+```powershell
+Get-ChildItem 'C:\Forensics\Exercises\iwf\Artifact_Hunting\'
+```
+
+Extract `windows_artifacts.zip` so that `windows_artifacts.vhdx` lands next to it:
+
+```powershell
+Expand-Archive -Path 'C:\Forensics\Exercises\iwf\Artifact_Hunting\windows_artifacts.zip' -DestinationPath 'C:\Forensics\Exercises\iwf\Artifact_Hunting\'
+```
+
+In File Explorer, navigate to `C:\Forensics\Exercises\iwf\Artifact_Hunting\` and double-click `windows_artifacts.vhdx`. Approve the UAC prompt if Windows asks for permission to mount the virtual disk. Windows assigns the mounted disk the next available drive letter, commonly `E:`. 
+
+The rest of this lab refers to mounted paths as `E:\…`, so be sure to **substitute your actual drive letter** if Windows assigned a different one.
+
+<Figure
+  src="https://placehold.co/900x420?text=Mounted+KAPE+VHDX+in+Explorer"
+  alt="File Explorer showing the mounted KAPE triage VHDX as a new drive letter, with a single top-level C\ folder containing Windows, Users, and other source-volume directories"
+  caption="The mounted KAPE collection in Explorer. The top-level C\ folder reflects the source machine's volume letter, preserved by KAPE during collection. Everything KAPE copied sits underneath that folder in its original directory structure."
+  width={800}
+/>
+
+When you open the mounted drive you'll see a single top-level folder called `C\`. That's the source machine's volume letter, preserved by KAPE. The paths below assume this structure, so what would have been `C:\Windows\System32\config\SOFTWARE` on the source system is `E:\C\Windows\System32\config\SOFTWARE` on yours.
+
+## Windows version (Registry)
+
+The first thing every Windows examination establishes is **what Windows we're looking at**. The version drives everything downstream, because no two Windows builds keep the same artifacts in the same places, and tools that work on one build can quietly do the wrong thing on another. That information lives in the `SOFTWARE` registry hive. The registry itself isn't a single file. It's stored on disk as a set of binary files called **hives**, each holding a different branch of the registry tree. The `SOFTWARE` hive specifically holds installed-software entries plus OS-level metadata, including the Windows version values you're about to read.
+
+**Registry Explorer**<Cite id="zimmerman-tools" /> is Eric Zimmerman's offline hive viewer. It opens a hive file directly and exposes the same tree structure you'd see in `regedit` against a live system, without needing Windows to mount the hive first. Either run it from PowerShell or double-click `RegistryExplorer.exe` in File Explorer:
+
+```powershell
+C:\Forensics\Tools\Zimmerman\RegistryExplorer\RegistryExplorer.exe
+```
+
+In Registry Explorer: **File → Load hive** and browse to `E:\C\Windows\System32\config\SOFTWARE`. Click **Open**.
+
+Registry Explorer will pop a **Dirty hive detected!** dialog. This is a very common occurrence when collecting Registry hives. While Windows is running, the `SOFTWARE` hive is in active use, and recent writes live in transaction log files (`SOFTWARE.LOG1`, `SOFTWARE.LOG2`) until they get merged back into the hive itself.
+
+<Figure
+  src="https://placehold.co/900x320?text=Registry+Explorer+Dirty+Hive+dialog"
+  alt="Registry Explorer's 'Dirty hive detected!' modal dialog asking whether to replay transaction logs against the loaded hive"
+  caption="Registry Explorer flags the SOFTWARE hive as dirty because its transaction logs have unmerged writes."
+  width={700}
+/>
+
+KAPE captures the hive and its logs in their as-of-collection state, so the hive file on disk doesn't yet reflect those pending writes. Registry Explorer can replay the logs against the hive to produce a merged copy that reflects the latest committed state at capture time.
+
+You'll need a place to drop the merged hive. Create an `exports\registry\` folder under the lab directory:
+
+```powershell
+New-Item -ItemType Directory -Path 'C:\Forensics\Exercises\iwf\Artifact_Hunting\exports\registry' -Force | Out-Null
+```
+
+Then click through the prompts:
+
+1. Click **Yes** to replay the transaction logs.
+2. Click **OK** at the next prompt to begin.
+3. In the file picker, select **all** of the `SOFTWARE.LOG*` files in `E:\C\Windows\System32\config\` and click **Open**.
+4. When asked where to save the updated hive, point it at `C:\Forensics\Exercises\iwf\Artifact_Hunting\exports\registry\`. Registry Explorer defaults the filename to `SOFTWARE_clean`. Accept it.
+5. Registry Explorer asks whether to load the updated hive. Click **Yes**.
+6. It then asks whether to also load the original dirty hive. Click **No** (you want to work from the clean version).
+
+The clean `SOFTWARE` hive is now loaded. Navigate the tree to:
+
+```text
+ROOT > Microsoft > Windows NT > CurrentVersion
+```
+
+In the right-hand pane you'll see the familiar set of values: `ProductName`, `DisplayVersion`, `CurrentBuild`, `UBR`, plus an `InstallDate` and a handful of others. Together these identify the OS down to the build and update level.
+
+<Figure
+  src="https://placehold.co/900x520?text=Registry+Explorer+SOFTWARE+hive+CurrentVersion"
+  alt="Registry Explorer with the SOFTWARE hive loaded offline, the Microsoft\Windows NT\CurrentVersion key selected, and ProductName, DisplayVersion, CurrentBuild, and UBR visible in the values pane"
+  caption="The CurrentVersion key in the offline SOFTWARE hive, with ProductName, DisplayVersion, CurrentBuild, and UBR visible in the right pane."
+  width={800}
+/>
+
+<Question id="lab-7-1-q1" label="Q1" type="text" accept="Windows 10 Enterprise Evaluation, windows 10 enterprise evaluation">
+  What does the `ProductName` value report for the imaged system?
+
+  <Hint>Read the `ProductName` value.</Hint>
+  <Solution>`Windows 10 Enterprise Evaluation`. This is actually a Windows 11 machine, but Windows still calls itself 10 in many places.</Solution>
+</Question>
+
+<Question id="lab-7-1-q2" label="Q2" type="text" accept="25H2, 25h2">
+  What does the `DisplayVersion` value report?
+
+  <Hint>It's the human-friendly Windows release identifier, in the format `YYHN`.</Hint>
+  <Solution>`25H2`. The format reads as "the second half (H2) of 2025", which is how Microsoft labels its feature updates on the Windows release cadence.</Solution>
+</Question>
+
+<Question id="lab-7-1-q3" label="Q3" type="text" accept="26200">
+  What does the `CurrentBuild` value report?
+
+  <Hint>An integer build number, no period or decimal.</Hint>
+  <Solution>`26200`. The major build number identifies the underlying OS image. Combined with the `UBR` you'll read next, it gives you the full patch level.</Solution>
+</Question>
+
+<Question id="lab-7-1-q4" label="Q4" type="text" accept="8457">
+  What does the `UBR` (Update Build Revision) value report?
+
+  <Hint>Another integer, smaller than `CurrentBuild`.</Hint>
+  <Solution>`8457`. The UBR increments with every cumulative monthly patch on top of the base `CurrentBuild`. Together, `CurrentBuild.UBR` (here `26200.8457`) is the complete patch identifier.</Solution>
+</Question>
+
+<Question id="lab-7-1-q5" label="Q5" type="text" accept="mhansen, MHansen, Mhansen">
+  Who is listed as the `RegisteredOwner`?
+
+  <Hint>Read the `RegisteredOwner` value.</Hint>
+  <Solution>`mhansen`. `RegisteredOwner` and the related `RegisteredOrganization` are filled in during initial Windows setup. It's common for them not to match the actual person using the machine, so treat them as a soft lead at best.</Solution>
+</Question>
+
+## Program execution (Prefetch)
+
+**Prefetch** is one of Windows' most reliable "Evidence Of Program Execution"<Cite id="evidence-of" /> sources<Cite id="prefetch" />. The OS writes a small `.pf` file under `C:\Windows\Prefetch\` the first time it sees a given executable run, then updates that file on subsequent runs to track how often the program has launched and which files it touched while running. Prefetch carries plenty of caveats, as evidence-of-execution artifacts generally do, but the basic claim it makes is straightforward. Each `.pf` file in this directory is evidence that an executable by that name ran on this system, with timestamps and a run count attached.
+
+The filename convention is `EXECUTABLE-XXXXXXXX.pf`, where the eight-character hex string is a hash of the executable's full path (and for some programs, like `svchost.exe`, the command-line arguments as well). The proprietary hash we find in `.pf` files means that `notepad.exe` running from `System32` and `notepad.exe` running from some other folder produce different Prefetch files even though the leading name is the same.
+
+**PECmd**<Cite id="zimmerman-tools" /> is Eric Zimmerman's Prefetch parser. Point it at a single `.pf` file or at a whole directory of them and it emits parsed output as CSV, JSON, or HTML. The CSV output is what you want for triage, because each row carries the source executable, the run count, the last-eight-runs timestamps, and the lists of files and directories the prefetch record references.
+
+You'll need a folder for the parsed output. Create one:
+
+```powershell
+New-Item -ItemType Directory -Path 'C:\Forensics\Exercises\iwf\Artifact_Hunting\exports\prefetch' -Force | Out-Null
+```
+
+Point PECmd at the whole `Prefetch\` directory in the mounted image and write CSV output into `exports\prefetch\`:
+
+```powershell
+PECmd.exe -d 'E:\C\Windows\Prefetch\' --csv 'C:\Forensics\Exercises\iwf\Artifact_Hunting\exports\prefetch' -q
+```
+
+PECmd processes every `.pf` file in the directory and writes **two CSVs** into `exports\prefetch\`:
+
+- The **summary** (`<timestamp>_PECmd_Output.csv`) gives one row per Prefetch file with that executable's run count and last-eight-runs timestamps.
+- The **timeline** (`<timestamp>_PECmd_Output_Timeline.csv`) expands each `.pf`'s eight timestamps into individual rows so the whole machine's execution history sorts chronologically.
+
+<Figure
+  src="https://placehold.co/900x320?text=PECmd+console+output+after+parsing+the+Prefetch+folder"
+  alt="PowerShell window showing PECmd's final summary lines after processing the Prefetch folder, naming the two output CSVs and the directory they were written to"
+  caption="PECmd finishing a directory-mode parse. The final lines name the two output CSVs and the destination directory."
+  width={800}
+/>
+
+**Timeline Explorer**<Cite id="zimmerman-tools" /> is Eric Zimmerman's CSV viewer built for the kind of output his parsers produce. It's a forensic-flavored spreadsheet view with filtering, sorting, and column-pinning that handles the typically wide forensic CSVs without the awkwardness of opening them in Excel. Open the summary output file (`<timestamp>_PECmd_Output.csv`, not the timeline one) in Timeline Explorer:
+
+```powershell
+C:\Forensics\Tools\Zimmerman\TimelineExplorer\TimelineExplorer.exe
+```
+
+Each row is one Prefetch file. Sort by `RunCount` to see which executables ran most, or by `LastRun` to surface the most recent execution activity on the box.
+
+<Figure
+  src="https://placehold.co/900x520?text=Timeline+Explorer+with+PECmd+summary+CSV"
+  alt="Timeline Explorer displaying the PECmd summary CSV with rows for various executables and the SourceFilename, Executable, RunCount, and LastRun columns prominent"
+  caption="The PECmd summary CSV in Timeline Explorer. SourceFilename, RunCount, and LastRun give an immediate read on which executables ran most and when."
+  width={800}
+/>
+
+<Question id="lab-7-1-q6" label="Q6" type="text" accept="MICROSOFTEDGEUPDATE.EXE, microsoftedgeupdate.exe, MicrosoftEdgeUpdate.exe">
+  Which executable name has the highest run count in the summary CSV?
+
+  <Hint>Sort by the `RunCount` column descending.</Hint>
+  <Solution>`MICROSOFTEDGEUPDATE.EXE` (Run Count: 20). Edge's update service runs frequently in the background, which is why it tends to dominate run counts on most modern Windows installs.</Solution>
+</Question>
+
+<Question id="lab-7-1-q7" label="Q7" type="text" accept="10, 10 times">
+  How many times did `NOTEPAD.EXE` record as having run?
+
+  <Hint>Filter the `ExecutableName` column for `NOTEPAD.EXE` and read its `RunCount`.</Hint>
+  <Solution>`10`. Run count includes every observed launch the prefetcher logged, whether the user kicked it off interactively or another process spawned it.</Solution>
+</Question>
+
+<Question id="lab-7-1-q8" label="Q8" type="text" accept="2026-05-22 17:06:21, 2026-05-22 17:06:11">
+  Filter the `ExecutableName` column for `powershell`. What was the **first date and time** it ran?
+
+  <Hint>Multiple timestamp columns can answer this differently. Either `SourceCreated` (the filesystem time the `.pf` file itself was created) or `PreviousRun0` (the earliest run embedded inside the prefetch record) counts.</Hint>
+  <Solution>Either `2026-05-22 17:06:21` (`SourceCreated`, when the `.pf` file was written to disk) or `2026-05-22 17:06:11` (`PreviousRun0`, the actual execution timestamp embedded inside the prefetch record). The two differ by a few seconds because Windows starts the program first and only writes the `.pf` file out shortly after (within ~10 seconds). That's one of the weird quirks with Prefetch!</Solution>
+</Question>
+
+<Question id="lab-7-1-q9" label="Q9" type="text" accept="58CA9656, 58ca9656">
+  What is the prefetch hash value for `MSPAINT.EXE`?
+
+  <Hint>Filter for `MSPAINT` and read the `Hash` column.</Hint>
+  <Solution>`58CA9656`. The 8-character hex hash is derived from the executable's full path. It's what lets Prefetch distinguish two executables that share a filename but live in different directories.</Solution>
+</Question>
+
+## File and folder opening (LNK)
+
+**LNK files** are Windows shortcut files. The format has been around since Windows 95 and is one of the standard "Evidence Of File Opening"<Cite id="evidence-of" /> sources on a Windows endpoint. Users create LNKs deliberately when they pin something to the Start menu or drag a shortcut onto the desktop, but Windows also creates them automatically as a side effect of opening files through Explorer, dropping each one into a per-user **Recent Items** folder. 
+
+That automatic, user-implicit creation is what makes the LNKs in `Recent\` forensically valuable. The folder lives at:
+
+```
+C:\Users\<username>\AppData\Roaming\Microsoft\Windows\Recent\
+```
+
+In the mounted image, we'll target the `mhansen` user.
+
+LNK files come with their own caveats. They only get created when a specific Explorer shell code path fires, which means programmatic file opens through PowerShell, scripts, or direct API calls typically skip the LNK write entirely. But the basic claim a LNK in `Recent\` makes is straightforward. The user opened a particular file or folder through Explorer at a particular time, and the shortcut record retains the original target path, the target volume's serial number, and several timestamps for both the LNK itself and the file it pointed at. 
+
+That information survives even when the target volume is no longer attached, which is what makes LNKs so durable as evidence of file opening.
+
+**LECmd**<Cite id="zimmerman-tools" /> is Eric Zimmerman's LNK parser. Point it at a single `.lnk` file or at a whole directory of them and it writes parsed output as CSV. Each row breaks one LNK down into the full set of fields the format carries, with the most useful columns being the original target path with drive letter, the target volume's serial number, the LNK's own MAC timestamps, and the target file's MAC timestamps.
+
+Add a folder for the parsed output:
+
+```powershell
+New-Item -ItemType Directory -Path 'C:\Forensics\Exercises\iwf\Artifact_Hunting\exports\lnk' -Force | Out-Null
+```
+
+Point LECmd at the whole `Recent\` directory in the mounted image and write CSV output into `exports\lnk\`:
+
+```powershell
+LECmd.exe -d 'E:\C\Users\mhansen\AppData\Roaming\Microsoft\Windows\Recent\' --csv 'C:\Forensics\Exercises\iwf\Artifact_Hunting\exports\lnk' -q
+```
+
+LECmd processes every `.lnk` in the directory and writes one CSV into `exports\lnk\`, named `<timestamp>_LECmd_Output.csv`. One row per parsed LNK, every metadata field broken out as its own column.
+
+<Figure
+  src="https://placehold.co/900x320?text=LECmd+console+output"
+  alt="PowerShell window showing LECmd's final summary lines after processing the Recent directory, naming the output CSV and the count of LNK files parsed"
+  caption="LECmd finishing a directory-mode parse. The final lines name the output CSV and the count of LNK files processed."
+  width={800}
+/>
+
+Now, open the LECmd output CSV in Timeline Explorer:
+
+```powershell
+C:\Forensics\Tools\Zimmerman\TimelineExplorer\TimelineExplorer.exe
+```
+
+Each row is one LNK. The `LocalPath` column records the full target path including the original drive letter, even if that volume is no longer attached. The `TargetCreated`, `TargetModified`, and `TargetAccessed` columns describe the original target file (separate from the LNK file's own MAC times, which sit in their own columns).
+
+<Figure
+  src="https://placehold.co/900x520?text=Timeline+Explorer+with+LECmd+output"
+  alt="Timeline Explorer displaying the LECmd output CSV with rows for various .lnk files and the SourceFile, LocalPath, TargetCreated, TargetModified, and TargetAccessed columns visible"
+  caption="The LECmd CSV in Timeline Explorer. SourceFile and LocalPath show which shortcut you're looking at and where the target file originally lived."
+  width={800}
+/>
+
+<Question id="lab-7-1-q10" label="Q10" type="text" accept="C:\Users\mhansen\Desktop\c4611_02.pdf, c:\users\mhansen\desktop\c4611_02.pdf, c4611_02.pdf">
+  What is the full path of the **PDF** file the user opened from their Desktop?
+
+  <Hint>Filter the `LocalPath` column for entries under `C:\Users\mhansen\Desktop\` and find the `.pdf`.</Hint>
+  <Solution>`C:\Users\mhansen\Desktop\c4611_02.pdf`. LECmd resolves the LNK's embedded TargetIDList and LinkInfo blocks back to a single absolute path. Even when the user later deletes the file from the desktop, the LNK in `Recent\` retains the original full path as evidence the file existed there at the time the user opened it.</Solution>
+</Question>
+
+<Question id="lab-7-1-q11" label="Q11" type="text" accept="Q2_HANDOFF, q2_handoff, Q2_handoff">
+  Most of the parsed LNKs point at files on a removable USB device. What is the **volume label** of that USB device?
+
+  <Hint>Read the `VolumeLabel` column for any row whose `DriveType` indicates removable media.</Hint>
+  <Solution>`Q2_HANDOFF`. The volume label is the human-readable name assigned when the USB was formatted. Windows records it inside every LNK created against that drive, so it survives even if the USB is wiped, reformatted, or never plugged into this machine again.</Solution>
+</Question>
+
+<Question id="lab-7-1-q12" label="Q12" type="text" accept="6E71F07D, 6e71f07d">
+  What is the **volume serial number** of that same USB device?
+
+  <Hint>Read the `VolumeSerialNumber` column.</Hint>
+  <Solution>`6E71F07D`. The volume serial number is a 32-bit value assigned by the filesystem when the volume is first formatted. It's a more reliable identifier than the volume label, because users occasionally rename labels but rarely change the VSN.</Solution>
+</Question>
+
+<Question id="lab-7-1-q13" label="Q13" type="text" accept="D:, D, d:, d, D:\\, d:\\">
+  What **drive letter** was the USB assigned when those files were opened on this system?
+
+  <Hint>Read the `LocalPath` column for any USB-targeted LNK.</Hint>
+  <Solution>`D:`. The drive letter Windows assigned at the time is permanently embedded in the LNK's target path. Even though the USB is no longer attached and `D:` is currently free, the historical assignment is preserved in every LNK that pointed at it.</Solution>
+</Question>
+
+## Deleted items (Recycle Bin)
+
+When a user deletes a file in Explorer (without `Shift+Del`), Windows moves it into the Recycle Bin instead of removing it from disk. The bin lives at `C:\$Recycle.Bin\<SID>\` on the source system, where `<SID>` is the user's security identifier. In the mounted image, that's `E:\C\$Recycle.Bin\<SID>\`, and a multi-user system has one SID subfolder per interactive account.
+
+Every delete produces two files in the per-user Recycle Bin folder that share a base name<Cite id="recycle-bin" />. The `$I` half carries the deletion metadata, including the original full path of the deleted file, its size in bytes, and the timestamp of the delete. The `$R` half carries the actual file bytes under a randomized filename. Recovery is a matter of reading the original filename out of the matching `$I` metadata and renaming the `$R` back to that.
+
+Recycle Bin entries come with their own caveats. Only Explorer's Delete action (right-click → Delete, or selecting a file and pressing `Del`) routes files into the bin. `Shift+Del`, `Remove-Item`, and `del` all bypass it entirely, as does almost every programmatic deletion path. Files deleted from removable media also skip the bin by default. But within those rules, an `$I` is straightforward evidence that the user deleted a particular file at a particular time through the Explorer shell, with the file's content probably still recoverable from the matching `$R`.
+
+**RBCmd**<Cite id="zimmerman-tools" /> is Eric Zimmerman's Recycle Bin parser. It reads the binary `$I` files and writes their metadata out as CSV. Each row gives the original full path of the deleted file, its size in bytes, and the deletion timestamp.
+
+Add a folder for the parsed output:
+
+```powershell
+New-Item -ItemType Directory -Path 'C:\Forensics\Exercises\iwf\Artifact_Hunting\exports\recyclebin' -Force | Out-Null
+```
+
+Point RBCmd at the whole `$Recycle.Bin\` tree in the mounted image and write CSV into `exports\recyclebin\`:
+
+```powershell
+RBCmd.exe -d 'E:\C\$Recycle.Bin\' --csv 'C:\Forensics\Exercises\iwf\Artifact_Hunting\exports\recyclebin' -q
+```
+
+RBCmd recurses into every SID subfolder, parses every `$I` file it finds, and writes one CSV (named like `<timestamp>_RBCmd_Output.csv`) with one row per recovered deletion event.
+
+<Figure
+  src="https://placehold.co/900x320?text=RBCmd+console+output"
+  alt="PowerShell window showing RBCmd's final summary lines after parsing the Recycle Bin tree, naming the output CSV and the count of $I files parsed"
+  caption="RBCmd finishing a directory-mode parse. The final lines name the output CSV and the count of $I files processed."
+  width={800}
+/>
+
+Open the RBCmd output CSV in Timeline Explorer:
+
+```powershell
+C:\Forensics\Tools\Zimmerman\TimelineExplorer\TimelineExplorer.exe
+```
+
+Each row is one deletion event. The `FileName` column carries the original full path of the deleted file with the drive letter intact, `FileSize` is the original size in bytes, and `DeletedOn` is the timestamp of the delete. To actually recover any of these, find the matching `$R` file in the same SID subfolder under the mounted image and rename it back to its original name.
+
+<Figure
+  src="https://placehold.co/900x520?text=Timeline+Explorer+with+RBCmd+output"
+  alt="Timeline Explorer displaying the RBCmd output CSV with rows for various deleted files and the FileName, FileSize, and DeletedOn columns visible"
+  caption="The RBCmd CSV in Timeline Explorer. FileName, FileSize, and DeletedOn give immediate visibility into what was deleted, how big it was, and when."
+  width={800}
+/>
+
+<Question id="lab-7-1-q14" label="Q14" type="text" accept="3, three">
+  How many deletion events did RBCmd recover from the Recycle Bin?
+
+  <Hint>Each row in the RBCmd CSV is one parsed `$I` file.</Hint>
+  <Solution>`3`. RBCmd found three `$I` files in the user's per-SID Recycle Bin subfolder, each representing one Explorer-initiated delete.</Solution>
+</Question>
+
+<Question id="lab-7-1-q15" label="Q15" type="text" accept="S-1-5-21-3842923860-4184023349-4095195563-1001, s-1-5-21-3842923860-4184023349-4095195563-1001">
+  What is the **SID** of the user account that performed these deletions?
+
+  <Hint>Read the `SourceName` column. The SID is the subfolder name under `$Recycle.Bin\` in the path.</Hint>
+  <Solution>`S-1-5-21-3842923860-4184023349-4095195563-1001`. The `S-1-5-21-...-<RID>` form is a local Windows SID, with the trailing relative identifier identifying a specific locally-created account. To resolve this SID to a username you'd cross-reference the `SAM` registry hive, or note that the only `C:\Users\<name>\` folder the SID has been acting in is `mhansen`.</Solution>
+</Question>
+
+<Question id="lab-7-1-q16" label="Q16" type="text" accept="C:\Users\mhansen\Desktop\valeriana.jpg, c:\users\mhansen\desktop\valeriana.jpg, valeriana.jpg">
+  What was the original full path of the **largest** deleted file?
+
+  <Hint>Sort by the `FileSize` column descending.</Hint>
+  <Solution>`C:\Users\mhansen\Desktop\valeriana.jpg`, at 401,495 bytes. `FileSize` records the original file size at the moment of deletion, useful both for prioritising recovery and for comparing against a known-good copy of the same file from elsewhere.</Solution>
+</Question>
+
+<Question id="lab-7-1-q17" label="Q17" type="text" accept="C:\Users\mhansen\Desktop\c4611_02.pdf, c:\users\mhansen\desktop\c4611_02.pdf, c4611_02.pdf">
+  Sort by `DeletedOn`. What was the **first** file the user sent to the bin?
+
+  <Hint>The earliest `DeletedOn` timestamp marks the first delete.</Hint>
+  <Solution>`C:\Users\mhansen\Desktop\c4611_02.pdf`, deleted at `2026-05-22 17:14:26`. All three deletions happened within six seconds of each other (`17:14:26`, `17:14:30`, `17:14:32`), which fits a user making three separate, deliberate deletion decisions.</Solution>
+</Question>
+
+## External device usage (USB)
+
+Windows keeps records of every USB device that has ever attached to the system, scattered across many places on disk. Multiple registry subtrees, event logs, per-user mount history, and driver install logs all carry pieces of the story. 
+
+This lab focuses on two of the most commonly-referenced sources. The registry's **USBSTOR** subtree (inside the `SYSTEM` hive) records the device classes and individual instances Windows currently knows about, with friendly names, descriptions, and per-property timestamps for first-installed and last-connected events. 
+
+The `setupapi.dev.log` file<Cite id="setupapi" /> is a plain-text log under `C:\Windows\INF\` where Windows appends a verbose record every time it installs a driver, including for every USB device it has ever seen. 
+
+USB tracking comes with many caveats, more than are worth diving into here. We'll keep this section to the high-level view.
+
+### USBSTOR
+
+The **USBSTOR** enumeration lives in the `SYSTEM` registry hive. Load the `SYSTEM` hive in Registry Explorer the same way you loaded `SOFTWARE` earlier: **File → Load hive** → browse to `E:\C\Windows\System32\config\SYSTEM`.
+
+If the **Dirty hive detected!** dialog appears again, click through the same replay flow and save the merged copy to `C:\Forensics\Exercises\iwf\Artifact_Hunting\exports\registry\` as `SYSTEM_clean`.
+
+Once the merged hive is loaded, navigate to:
+
+```text
+ROOT > ControlSet001 > Enum > USBSTOR
+```
+
+Each subkey under `USBSTOR` represents one device class (vendor + product + revision), with names that look like `Disk&Ven_SanDisk&Prod_Cruzer_Blade&Rev_1.00`.
+
+<Figure
+  src="https://placehold.co/900x460?text=USBSTOR+expanded+in+Registry+Explorer"
+  alt="Registry Explorer with the merged SYSTEM hive loaded and ControlSet001\Enum\USBSTOR expanded in the left tree, showing the SanDisk Cruzer Blade class subkey"
+  caption="USBSTOR expanded in Registry Explorer. The single class subkey on this image is the SanDisk Cruzer Blade that was plugged into the source system."
+  width={800}
+/>
+
+Inside the SanDisk class subkey, the next level is the device instance subkey, keyed by the device's **serial number** (`00016223081722125641&0`). Click into it. The values pane shows `FriendlyName` (the device name as it appears in Explorer), `DeviceDesc` (a longer device description), and an attached `Properties` subtree carrying Windows-managed timestamps for first-install, first-arrival, last-arrival, and last-removal events.
+
+<Figure
+  src="https://placehold.co/900x520?text=Device+instance+subkey+values+pane"
+  alt="Registry Explorer with the SanDisk device instance subkey selected, showing FriendlyName, DeviceDesc, and a Properties subkey in the values pane on the right"
+  caption="The device instance subkey selected, with FriendlyName and DeviceDesc visible in the right pane and the Properties subtree underneath."
+  width={800}
+/>
+
+#### USB timestamps
+
+Open `Properties`. Inside it is a subtree with a long GUID name, `{83da6326-97a6-4088-9453-a1923f573b29}`. That GUID is fixed across every Windows install and identifies the device-install property category, so every USBSTOR device's `Properties` carries exactly the same one. Open it.
+
+Inside the GUID node are numerically-named subkeys, each carrying a 64-bit FILETIME timestamp that Registry Explorer parses and displays as a readable date and time:
+
+- `0064`: first-install date (the first time this device was plugged into this system)
+- `0065`: first-arrival date (when the device's driver was first loaded)
+- `0066`: last-arrival date (the most recent time the device was connected)
+- `0067`: last-removal date (the most recent time the device was disconnected)
+
+
+<Figure
+  src="https://placehold.co/900x460?text=0064+first-install+timestamp"
+  alt="Registry Explorer showing the 0064 subkey under the device-install GUID, with the decoded FILETIME timestamp value displayed in the values pane"
+  caption="The 0064 subkey under the device-install GUID. Registry Explorer decodes the raw binary FILETIME to a human-readable date and time."
+  width={800}
+/>
+
+Notice that this image doesn't have a `0067` subkey at all. The triage capture was taken while the SanDisk was still plugged into the source system, so Windows never had occasion to record a last-removal event. The other three timestamps (`0064`, `0065`, `0066`) are present because those events all happened (install, driver load, connect) before the snapshot.
+
+### setupapi.dev.log
+
+The `setupapi.dev.log` file lives at `C:\Windows\INF\setupapi.dev.log` on the source system, which means it's at `E:\C\Windows\INF\setupapi.dev.log` in the mounted image. It's a multi-megabyte plain-text file. Notepad opens it but is slow. Notepad++ or any modern editor handles it without issue.
+
+A single USB device plug-in produces several `>>>  [Device Install (Hardware initiated) - ...]` markers as Windows registers the device at each layer of its bus stack. Filtering for the ones that mention `USBSTOR` catches the records relevant to removable storage. Each marker's line carries the device path (vendor, product, revision, and serial number) inline, with the install timestamp and Windows's driver-bind steps in the lines that follow.
+
+From PowerShell, use `Select-String` to find installs that mention `USBSTOR`, with five lines of context after each hit:
+
+```powershell
+Select-String -Path 'E:\C\Windows\INF\setupapi.dev.log' -Pattern '>>>\s+\[Device Install.*USBSTOR' -Context 0,5
+```
+
+Cross-reference the device paths and timestamps you find here against the USBSTOR data above to build a complete attached-device timeline. One catch: `setupapi.dev.log` records timestamps in the **source system's local time**, while the registry's `0064` value is a **FILETIME stored in UTC**. The same install event reads as two different timestamps depending on which source you're looking at, so you have to add or subtract the source machine's UTC offset before they line up.
+
+<Figure
+  src="https://placehold.co/900x520?text=setupapi.dev.log+Select-String+output"
+  alt="PowerShell window showing Select-String output against setupapi.dev.log, with one or more '>>>  [Device Install (Hardware initiated) - SWD\WPDBUSENUM\_??_USBSTOR#...]' records visible along with the surrounding context lines"
+  caption="Select-String surfaces every USB device install in setupapi.dev.log along with the surrounding lines that carry the hardware ID and install timestamp."
+  width={800}
+/>
+
+<Question id="lab-7-1-q18" label="Q18" type="text" accept="SanDisk Cruzer Blade USB Device, sandisk cruzer blade usb device, SanDisk Cruzer Blade">
+  What value does `FriendlyName` report for the device?
+
+  <Hint>Read the `FriendlyName` value on the device instance subkey.</Hint>
+  <Solution>`SanDisk Cruzer Blade USB Device`. `FriendlyName` is the human-readable label Explorer and most other Windows UIs display for the device. The manufacturer ships it in the device's USB descriptors.</Solution>
+</Question>
+
+<Question id="lab-7-1-q19" label="Q19" type="text" accept="00016223081722125641, 00016223081722125641&0">
+  What is the device's serial number?
+
+  <Hint>The device instance subkey under `USBSTOR\Disk&Ven_SanDisk&Prod_Cruzer_Blade&Rev_1.00\` is named with the serial.</Hint>
+  <Solution>`00016223081722125641`. The serial is reported by the USB device's descriptor and is burned into the device firmware. The trailing `&0` Windows appends is an instance index for that hardware on this bus. For forensic correlation, the serial is the most reliable identifier for the same physical USB stick across different systems and different user accounts. Users can rename volume labels, but they can't change firmware-burned serials.</Solution>
+</Question>
+
+<Question id="lab-7-1-q20" label="Q20" type="text" accept="2026-05-22 17:12:05, 2026-05-22T17:12:05">
+  According to the registry's `0064` value under the device-install GUID, when was this USB **first installed** on the system?
+
+  <Hint>Read the value at `Properties\{83da6326-97a6-4088-9453-a1923f573b29}\0064`.</Hint>
+  <Solution>`2026-05-22 17:12:05`. The `0064` value is stored as a 64-bit FILETIME, and FILETIME is always in **UTC**. Registry Explorer decodes the binary to a readable date and time.</Solution>
+</Question>
+
+<Question id="lab-7-1-q21" label="Q21" type="text" accept="2026-05-22 10:12:06, 2026-05-22 10:12:06.485, 2026/05/22 10:12:06, 2026/05/22 10:12:06.485">
+  According to `setupapi.dev.log`, what date and time did the install section for the SanDisk start?
+
+  <Hint>The line right after the `>>>  [Device Install (Hardware initiated) - ... USBSTOR ...]` marker reads `>>>  Section start <timestamp>`.</Hint>
+  <Solution>`2026-05-22 10:12:06` (full value in the log is `2026/05/22 10:12:06.485`). Unlike the registry's `0064` FILETIME, the setupapi log records timestamps in the **local** time of the source system at the moment of the install. The roughly seven-hour gap between this and the registry value (`17:12:05` UTC) is the source system's timezone offset from UTC. Whenever you correlate across artifact sources, check whether each one stores UTC or local time.</Solution>
+</Question>
+
+## Wrapping Up
+
+You've now located a concrete example of every major Windows artifact category. The **registry baseline** identifies the system you're examining down to the build. The parsed **Prefetch files** document what executables have actually run on that system. The **LNK files** under `Recent\` capture what the user opened or interacted with, including items on drives that are no longer attached. Modern **Recycle Bin** artifacts `$I`/`$R` preserve both the deletion metadata and the original bytes of items the user sent to the bin. The **USBSTOR** registry key and the `setupapi.dev.log` file are part of the many artifacts that help reconstruct what removable devices have been plugged in and when. 
+
+What you covered here is a non-exhaustive look at the "Evidence Of..." framework<Cite id="evidence-of" /> for Windows artifacts. Knowing where each category lives and recognizing what you're looking at when you find it matters far more than fluency with any one tool. That recognition is what this lab built. The deeper analytical work will build on that foundation.

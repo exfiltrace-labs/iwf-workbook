@@ -104,14 +104,10 @@ export function Debrief({ caseData, state, score, onReplay, onExit }: DebriefPro
           ))}
         </section>
 
-        <div className="mt-8 flex justify-end gap-2">
+        <div className="mt-8 flex justify-end">
           <Button variant="outline" size="sm" onClick={onExit}>
             <ChevronLeft className="h-4 w-4" />
             Back to brief
-          </Button>
-          <Button variant="default" size="sm" onClick={onReplay}>
-            <RotateCcw className="h-4 w-4" />
-            Replay this lab
           </Button>
         </div>
       </div>
