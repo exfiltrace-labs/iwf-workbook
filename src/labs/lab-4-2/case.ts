@@ -64,6 +64,17 @@ const WHY_OPTIONS = [
   'Transport to forensic lab for processing',
 ]
 
+const WHERE_OPTIONS = [
+  'Suspect\'s home residence',
+  'Halcyon Industries HR office',
+  'Off-site cloud storage',
+  'Forensic lab, analysis workstation',
+  'Halcyon Industries IT closet',
+  'Central evidence locker',
+  'In transit from Halcyon HQ to forensic lab',
+  'Forensic lab, imaging workstation',
+]
+
 const ORIGINAL_DEVICE = 'Original Dell Latitude 5430 (S/N DL-5430-XR8K2P9)'
 const FORENSIC_IMAGE = 'Forensic image (E01 file from S/N DL-5430-XR8K2P9)'
 
@@ -129,6 +140,13 @@ export const CASE: CustodyCase = {
           correct: ORIGINAL_DEVICE,
         },
         {
+          id: 'where',
+          label: 'Location',
+          type: 'dropdown',
+          options: WHERE_OPTIONS,
+          correct: 'Halcyon Industries HR office',
+        },
+        {
           id: 'why',
           label: 'Reason for transfer',
           type: 'dropdown',
@@ -186,6 +204,13 @@ export const CASE: CustodyCase = {
           type: 'dropdown',
           options: WHAT_OPTIONS,
           correct: ORIGINAL_DEVICE,
+        },
+        {
+          id: 'where',
+          label: 'Location',
+          type: 'dropdown',
+          options: WHERE_OPTIONS,
+          correct: 'Halcyon Industries HR office',
         },
         {
           id: 'why',
@@ -247,6 +272,13 @@ export const CASE: CustodyCase = {
           correct: ORIGINAL_DEVICE,
         },
         {
+          id: 'where',
+          label: 'Location',
+          type: 'dropdown',
+          options: WHERE_OPTIONS,
+          correct: 'In transit from Halcyon HQ to forensic lab',
+        },
+        {
           id: 'why',
           label: 'Reason for transfer',
           type: 'dropdown',
@@ -305,6 +337,13 @@ export const CASE: CustodyCase = {
           type: 'dropdown',
           options: WHAT_OPTIONS,
           correct: ORIGINAL_DEVICE,
+        },
+        {
+          id: 'where',
+          label: 'Location',
+          type: 'dropdown',
+          options: WHERE_OPTIONS,
+          correct: 'Forensic lab, imaging workstation',
         },
         {
           id: 'why',
@@ -375,6 +414,13 @@ export const CASE: CustodyCase = {
           correct: ORIGINAL_DEVICE,
         },
         {
+          id: 'where',
+          label: 'Location',
+          type: 'dropdown',
+          options: WHERE_OPTIONS,
+          correct: 'Central evidence locker',
+        },
+        {
           id: 'why',
           label: 'Reason for transfer',
           type: 'dropdown',
@@ -433,6 +479,13 @@ export const CASE: CustodyCase = {
           type: 'dropdown',
           options: WHAT_OPTIONS,
           correct: FORENSIC_IMAGE,
+        },
+        {
+          id: 'where',
+          label: 'Location',
+          type: 'dropdown',
+          options: WHERE_OPTIONS,
+          correct: 'Forensic lab, analysis workstation',
         },
         {
           id: 'why',

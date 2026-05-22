@@ -78,6 +78,26 @@ references:
     detail: Microsoft Learn
 ---
 
+import folderOptions from './images/folder_options.png'
+import userProfileNtuser from './images/user_profile_ntuser.png'
+import defenderExclusions from './images/defender_exclusions.png'
+import powercfgSleep from './images/powercfg_sleep.png'
+import getTimezone from './images/get_timezone.png'
+import noAutoUpdate from './images/noautoupdate.png'
+import longPathsEnabled from './images/longpaths_enabled.png'
+import caseFolder from './images/case_folder.png'
+import startTranscript from './images/start_transcript.png'
+import getCommand from './images/get_command.png'
+import getHelp from './images/get_help.png'
+import system32Pipeline from './images/system32_pipeline.png'
+import exportCsv from './images/export_csv.png'
+import pecmdOutput from './images/pecmd_output.png'
+import teLoaded from './images/te_loaded.png'
+import teFiltered from './images/te_filtered.png'
+import teSearch from './images/te_search.png'
+import teGrouped from './images/te_grouped.png'
+import teStatusBar from './images/te_status_bar.png'
+
 ## Background
 
 A forensic workstation is configured very differently from a stock Windows install. Out of the box, Windows hides system files, hides file extensions, lets Defender quarantine unrecognized binaries, and puts the machine to sleep on a timer. Each of those choices is sensible for an everyday machine, but not as helpful for an examiner. Examiners spend a lot of time looking inside files Windows hides from regular users, rely on tools that often share signatures with malware, and run analyses that can stretch over many hours. A workstation tuned for casual use gets in the way of all three.
@@ -106,28 +126,28 @@ On Windows 11, click the **View** button in the toolbar, hover over **Show**, an
 On either Windows 10 or 11, open **Options → Change folder and search options → View** and confirm the following:
 
 - **Show hidden files, folders, and drives** is selected.
-- **Hide extensions for known file types** is **unchecked**.
-- **Hide protected operating system files (Recommended)** is **unchecked**.
-- **Launch folder windows in a separate process** is **checked**.
+- **Hide extensions for known file types** is unchecked.
+- **Hide protected operating system files (Recommended)** is unchecked.
+- **Launch folder windows in a separate process** is checked.
 
 The first three settings change what File Explorer shows. The fourth changes how it runs. By default, every Explorer window shares a single `explorer.exe` process with the Start menu, taskbar, and desktop shell, which means one window hanging on a mounted image or an unresponsive network path can freeze the entire shell along with it. Checking this option gives each window its own process, so a stuck listing only takes that one window down.
 
 Once the four options are set, click **Apply to Folders** at the top of the dialog before closing. That propagates the current folder's view (column layout, sort order, view mode) to every folder of the same template type, so the layout stays consistent across the machine rather than resetting per folder.
 
 <Figure
-  src="https://placehold.co/900x520?text=Folder+Options+forensic+defaults"
+  src={folderOptions}
   alt="Windows Folder Options dialog on the View tab, with Show hidden files selected, Hide extensions for known file types unchecked, and Hide protected operating system files unchecked"
   caption="Folder Options with all three forensic-relevant settings configured. Hidden + system files visible, extensions visible."
-  width={700}
+  width={450}
 />
 
 To see this in practice, navigate to your user profile folder at `C:\Users\<username>\` in File Explorer. With the three Folder Options settings applied above, you should now see files like `NTUSER.DAT` (the per-user registry hive), `NTUSER.DAT.LOG1`, `ntuser.ini`, and a handful of other protected files that are normally hidden from view. Under stock Windows settings, none of these would appear at all.
 
 <Figure
-  src="https://placehold.co/900x320?text=User+profile+folder+with+NTUSER.DAT+visible"
+  src={userProfileNtuser}
   alt="File Explorer showing C:\Users\<username>\ with NTUSER.DAT, NTUSER.DAT.LOG1, ntuser.ini, and other protected files visible alongside the usual Documents, Downloads, and Pictures folders"
   caption="The user profile folder with protected system files visible. NTUSER.DAT is the per-user registry hive."
-  width={800}
+  width={900}
 />
 
 <Question id="lab-8-1-q1" label="Q1" type="text" accept="Hide extensions for known file types, hide extensions for known file types, HIDE EXTENSIONS FOR KNOWN FILE TYPES, Hide extensions, hide extensions, Hide file extensions, hide file extensions">
@@ -157,7 +177,7 @@ Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
 You should see at least `C:\Forensics\Tools\` and the course Exercises directory in the output<Cite id="get-mppreference" />. You may also see tool-specific exclusions alongside those. Oftentimes when installing additional forensic tools or suites, the install wizard asks to exclude (or automatically excludes) its installation path for this exact reason.
 
 <Figure
-  src="https://placehold.co/900x280?text=Defender+exclusion+paths"
+  src={defenderExclusions}
   alt="PowerShell window showing Get-MpPreference Select-Object ExclusionPath output with C:\Forensics\Tools\ and the iwf Exercises directory listed"
   caption="The registered Defender exclusions listed via Get-MpPreference."
   width={800}
@@ -210,6 +230,12 @@ powercfg /q SCHEME_CURRENT SUB_SLEEP | Select-String 'Power Setting GUID|Current
 
 The `powercfg /q` command queries the power configuration. `SCHEME_CURRENT` scopes the query to the active power plan, and `SUB_SLEEP` narrows further to its Sleep subgroup.
 
+<Figure
+  src={powercfgSleep}
+  alt="PowerShell window showing the filtered powercfg /q SCHEME_CURRENT SUB_SLEEP output, with Power Setting GUID friendly-name lines for Sleep after and Hibernate after each followed by Current AC Power Setting Index and Current DC Power Setting Index lines reading 0x00000000"
+  caption="The filtered powercfg output for the Sleep subgroup. Each Power Setting GUID line names a setting (Sleep after, Hibernate after, etc.), and the AC and DC index lines below show the current value for each."
+/>
+
 You're looking for the **Sleep after** and **Hibernate after** entries to both show `0x00000000` for AC and DC, which means the timer is disabled outright rather than triggered after some interval. A non-zero value is a timer duration in seconds, meaning the machine will sleep or hibernate after that interval.
 
 To confirm hibernation specifically:
@@ -255,6 +281,13 @@ To check what timezone your workstation is currently set to, run:
 Get-TimeZone
 ```
 
+<Figure
+  src={getTimezone}
+  alt="PowerShell window showing Get-TimeZone output with the timezone's display name (e.g. Coordinated Universal Time), the standard-time abbreviation, and the current UTC offset"
+  caption="Get-TimeZone output. Display name, standard-time abbreviation, and UTC offset for the workstation's currently configured timezone."
+  width={600}
+/>
+
 The output shows the timezone's display name, its standard-time abbreviation, and its current UTC offset<Cite id="get-timezone" />. Confirm it matches what you expect.
 
 To set the workstation to UTC explicitly, run from an elevated PowerShell window:
@@ -285,10 +318,9 @@ Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\
 You're looking for `NoAutoUpdate : 1`<Cite id="windows-update-au-policy" />. Setting this value to 1 tells Windows Update to never install updates without explicit user action. Updates can still be checked for and downloaded through the Settings app, but they wait there until you choose to apply them.
 
 <Figure
-  src="https://placehold.co/900x220?text=NoAutoUpdate+registry+value"
+  src={noAutoUpdate}
   alt="PowerShell output showing Get-ItemProperty result with NoAutoUpdate equal to 1 under HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
   caption="The NoAutoUpdate policy value reading 1, confirming automatic install of updates is disabled."
-  width={800}
 />
 
 This isn't the same as disabling Windows Update entirely. The update mechanism keeps running in the background and the change only removes the automatic install step, so updates never apply themselves while you're working. To apply pending updates between cases, open **Settings → Windows Update** and trigger the install manually.
@@ -303,13 +335,6 @@ In most cases, OneDrive should be uninstalled entirely on a forensic workstation
 Get-Process -Name OneDrive -ErrorAction SilentlyContinue
 Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name OneDrive -ErrorAction SilentlyContinue
 ```
-
-<Figure
-  src="https://placehold.co/900x260?text=OneDrive+audit+empty+output"
-  alt="PowerShell window showing Get-Process OneDrive and Get-ItemProperty for the Run key both returning no output, indicating OneDrive is not running and not set to auto-start"
-  caption="Both audit commands return nothing, confirming OneDrive is neither running nor set to launch at login."
-  width={800}
-/>
 
 Both commands should return nothing. The first confirms no OneDrive process is currently running. The second confirms OneDrive isn't registered to start automatically at user login.
 
@@ -341,10 +366,9 @@ Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name
 You should see `LongPathsEnabled : 1`<Cite id="long-paths-enabled" />. With that flag set, applications built with long-path awareness (most modern forensic tools, plus PowerShell itself) can work with paths longer than 260 characters. Legacy applications that haven't been updated still hit the cap, but the ceiling is lifted for everything that has been.
 
 <Figure
-  src="https://placehold.co/900x220?text=LongPathsEnabled+registry+value"
+  src={longPathsEnabled}
   alt="PowerShell output showing Get-ItemProperty result with LongPathsEnabled equal to 1 under HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem"
   caption="LongPathsEnabled reading 1, confirming the OS supports paths longer than 260 characters for path-aware applications."
-  width={800}
 />
 
 To enable it yourself, run from an elevated PowerShell window:
@@ -375,7 +399,7 @@ Get-ChildItem $caseRoot
 This creates the case root under `C:\Cases\$caseId\` (`CASE-001`) with five subfolders inside.
 
 <Figure
-  src="https://placehold.co/900x320?text=Case+folder+structure"
+  src={caseFolder}
   alt="PowerShell Get-ChildItem output for C:\Cases\CASE-001\ showing five subdirectories: intake, evidence, exports, notes, reports"
   caption="A per-case directory layout with five subfolders. The same structure is used for every case."
   width={800}
@@ -410,7 +434,7 @@ Stop-Transcript
 ```
 
 <Figure
-  src="https://placehold.co/900x340?text=Start-Transcript+session+log"
+  src={startTranscript}
   alt="PowerShell window showing Start-Transcript confirming the log file path, a few commands being captured during the session, and Stop-Transcript ending the recording"
   caption="A transcript runs from Start-Transcript to Stop-Transcript. Every command and its output between the two ends up in the timestamped log file under the case's notes folder."
   width={800}
@@ -465,7 +489,7 @@ Get-Command Get-*
 That returns every cmdlet whose name starts with `Get-`. Combined with the Verb-Noun convention, this is a fast way to find what's available without having to memorize anything in advance.
 
 <Figure
-  src="https://placehold.co/900x420?text=Get-Command+Get-*+output"
+  src={getCommand}
   alt="PowerShell window showing Get-Command Get-* output listing cmdlets like Get-Acl, Get-Alias, Get-ChildItem, Get-Content, Get-Date, Get-Help, Get-Process, with CommandType, Name, Version, and Source columns"
   caption="Get-Command Get-* listing the Get- family of cmdlets available in the current session, with their CommandType, Version, and source module."
   width={800}
@@ -489,10 +513,9 @@ Get-Help Get-ChildItem
 If you're prompted to run `Update-Help`, you can do so by answering Yes at the prompt. The download takes a few minutes and pulls the latest help content from Microsoft, after which `Get-Help <anything>` works offline.
 
 <Figure
-  src="https://placehold.co/900x440?text=Get-Help+Get-ChildItem+output"
+  src={getHelp}
   alt="PowerShell window showing Get-Help Get-ChildItem output with the NAME, SYNOPSIS, SYNTAX, DESCRIPTION, and RELATED LINKS sections"
   caption="Get-Help output for Get-ChildItem. The same section structure is used for every cmdlet, which makes the help format predictable once you've read one."
-  width={800}
 />
 
 ### The pipeline
@@ -508,10 +531,10 @@ Get-ChildItem 'C:\Windows\System32' -File |
 ```
 
 <Figure
-  src="https://placehold.co/900x360?text=System32+pipeline+output"
+  src={system32Pipeline}
   alt="PowerShell window showing the Get-ChildItem to Where-Object to Select-Object pipeline output, displaying a table of files in C:\Windows\System32 larger than 5MB with Name, Length, and LastWriteTime columns"
   caption="The pipeline output, narrowed to files in System32 larger than 5MB and limited to the three columns the final stage requested."
-  width={800}
+  width={600}
 />
 
 This pipeline contains three cmdlets, each performing its own job. 
@@ -543,10 +566,10 @@ Get-ChildItem 'C:\Windows\System32' -File |
 ```
 
 <Figure
-  src="https://placehold.co/900x360?text=Export-Csv+pipeline+output"
+  src={exportCsv}
   alt="PowerShell window showing the Get-ChildItem Select-Object Export-Csv pipeline running and the resulting system32_files.csv first few lines via Get-Content"
   caption="The Get-ChildItem to Export-Csv pipeline producing system32_files.csv."
-  width={800}
+  width={900}
 />
 
 The `-NoTypeInformation` flag strips the `#TYPE` header that older PowerShell versions injected and that most CSV consumers don't want. You can confirm the resulting CSV at `C:\Cases\CASE-001\exports\system32_files.csv` by reading it in the console with `Get-Content`, opening it in Notepad, or better yet loading it in **Timeline Explorer**.
@@ -579,10 +602,10 @@ PECmd.exe -d C:\Windows\Prefetch --csv C:\Cases\CASE-001\exports\ -q
 ```
 
 <Figure
-  src="https://placehold.co/900x420?text=PECmd+output"
+  src={pecmdOutput}
   alt="PowerShell window showing PECmd output: version banner, command-line echo, the 'Looking for prefetch files in C:\Windows\Prefetch' line, a Found N Prefetch files count, and a final 'Processed N out of N files' summary"
   caption="PECmd parsing every .pf file under C:\Windows\Prefetch and writing two CSV files into the case's exports folder: a per-file summary and a timeline view."
-  width={800}
+  width={900}
 />
 
 The `-d` flag points PECmd at a directory of Prefetch files to process. `--csv` writes the parsed output as CSV files into the folder you specify. `-q` enables quiet mode. PECmd produces **two output files**: a **per-file summary** and a **timeline view** with one row per recorded execution.
@@ -599,10 +622,9 @@ The `-d` flag points PECmd at a directory of Prefetch files to process. `--csv` 
 Load the timeline CSV into Timeline Explorer (`<timestamp>_PECmd_Output_Timeline.csv`). The `.csv` extension is already associated with Timeline Explorer on the workstation, so double-clicking the file from File Explorer launches the tool with it loaded. You can also launch Timeline Explorer from the Start menu and use **File → Open**, or drag the CSV directly onto the window. Each file you load gets its own tab.
 
 <Figure
-  src="https://placehold.co/900x520?text=Timeline+Explorer+loaded"
+  src={teLoaded}
   alt="Timeline Explorer with the PECmd timeline CSV freshly loaded, all rows visible, columns for ExecutableName, RunTime, SourceFilename and other Prefetch metadata, the file path in the bottom-left status bar, and the total row count in the bottom-right"
   caption="Timeline Explorer immediately after loading the PECmd timeline CSV. Each Prefetch execution is one row, with columns for the executable name, run time, and the rest of the parsed metadata."
-  width={800}
 />
 
 ### Filtering rows
@@ -614,23 +636,21 @@ Each active filter shows up as a chip along the bottom of the window. On the chi
 For a column where you don't know the exact string to filter on, the small funnel icon next to the column name opens a list of every unique value present in that column. That doubles as a quick way to see what distinct values a field actually contains before you decide what to filter for.
 
 <Figure
-  src="https://placehold.co/900x520?text=Timeline+Explorer+filtered"
+  src={teFiltered}
   alt="Timeline Explorer with a column filter applied to ExecutableName for the substring 'notepad', only Notepad-related rows visible, the active filter chip along the bottom of the window, and the status bar showing the reduced visible row count"
   caption="A column filter applied to ExecutableName. Only rows whose ExecutableName contains 'notepad' remain visible, and the active filter chip sits along the bottom of the window."
-  width={800}
 />
 
 ### Search mode
 
 The **Search options** button near the top right toggles between two modes. Filter is the default and is what you've been using so far. Search behaves differently. It keeps every row visible, highlights the matches in place, and lets you step between them with the arrow keys. The visible-row count in the status bar drops in Filter mode and stays unchanged in Search mode, which is the fastest way to tell which mode is currently active.
 
-The search box itself accepts space-separated terms, with `+` for AND and `-` for NOT. Entering `.exe +CON` matches rows that contain both `.exe` and `CON`, and `powershell -ise` matches rows that contain `powershell` but not `ise`. The **?** icon next to the search options opens a reference for the full syntax.
+The search box itself accepts space-separated terms, with `+` for AND and `-` for NOT. Entering `.exe +NOTE` matches rows that contain both `.exe` and `NOTE`, and `system32 -winsxs` matches rows that contain `system32` but not `winsxs`. The **?** icon next to the search options opens a reference for the full syntax.
 
 <Figure
-  src="https://placehold.co/900x520?text=Timeline+Explorer+search+mode"
+  src={teSearch}
   alt="Timeline Explorer with Search mode active, every row still visible in the grid, matching rows highlighted in place, and the visible-row count in the status bar unchanged from the full dataset"
   caption="Search mode keeps every row visible and highlights matches in place. The visible-row count in the status bar stays unchanged from the full dataset, which is what tells you you're in Search rather than Filter."
-  width={800}
 />
 
 ### Grouping by a column
@@ -638,10 +658,9 @@ The search box itself accepts space-separated terms, with `+` for AND and `-` fo
 Above the column headers is a thin bar that reads **"Drag a column header here to group by that column"**. Drag any column header into that bar and Timeline Explorer collapses the grid into groups by that column's values, with a count beside each group header. With the PECmd timeline data, grouping by `ExecutableName` collapses every recorded execution of the same program into one expandable header showing how many times that program ran. To undo the grouping, drag the column back down into the grid, or right-click the column in the group bar and choose **UnGroup**.
 
 <Figure
-  src="https://placehold.co/900x520?text=Timeline+Explorer+grouped+by+ExecutableName"
+  src={teGrouped}
   alt="Timeline Explorer with the PECmd timeline CSV grouped by ExecutableName, showing collapsed groups with run counts beside each executable name"
   caption="The same CSV grouped by ExecutableName. Each group header collapses every execution of one program into a single row with the count beside it."
-  width={800}
 />
 
 ### The status bar
@@ -649,10 +668,9 @@ Above the column headers is a thin bar that reads **"Drag a column header here t
 The status bar at the bottom of the window ties the rest together. The left half shows the full path of the currently loaded CSV. The right half shows the total row count next to the visible row count. The visible count is the fastest way to confirm a filter is narrowing the dataset to what you expected, and the gap between visible and total is what tells you a filter is active at all.
 
 <Figure
-  src="https://placehold.co/900x140?text=Timeline+Explorer+status+bar"
+  src={teStatusBar}
   alt="Close-up of Timeline Explorer's status bar showing the full loaded file path on the left and the total versus visible row counts on the right"
   caption="Close-up of the status bar. Loaded file path on the left, total versus visible row counts on the right."
-  width={800}
 />
 
 ## Wrapping Up
