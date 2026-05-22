@@ -39,7 +39,7 @@ export function CustodyForm({
           Chain of custody form
         </h2>
         <p className="text-[12.5px] text-forensic-textMuted">
-          Document each transfer with the 5W1H fields: who, what, when, where, why, and how.
+          Document each transfer with: who, when, what, why, and how.
         </p>
       </div>
 
