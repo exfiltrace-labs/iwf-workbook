@@ -34,6 +34,20 @@ references:
     detail: Kroll
 ---
 
+import mountedVhdxExplorer from './images/mounted_vhdx_explorer.png'
+import dirtyHiveDialog from './images/dirty_hive_dialog.png'
+import softwareCurrentVersion from './images/software_currentversion.png'
+import pecmdConsole from './images/pecmd_console.png'
+import tePecmdSummary from './images/te_pecmd_summary.png'
+import lecmdConsole from './images/lecmd_console.png'
+import teLecmdOutput from './images/te_lecmd_output.png'
+import rbcmdConsole from './images/rbcmd_console.png'
+import teRbcmdOutput from './images/te_rbcmd_output.png'
+import usbstorExpanded from './images/usbstor_expanded.png'
+import usbDeviceInstance from './images/usb_device_instance.png'
+import usbInstallTimestamp from './images/usb_install_timestamp.png'
+import setupapiSelectString from './images/setupapi_select_string.png'
+
 ## Background
 
 A Windows endpoint generates an enormous volume of forensic evidence simply by operating. Some of those traces come from the operating system itself recording its own work. Others are byproducts of user activity. A forensic examination of a Windows system is largely the work of finding those traces, understanding what each one proves, and assembling them into a coherent narrative.
@@ -78,7 +92,7 @@ In File Explorer, navigate to `C:\Forensics\Exercises\iwf\Artifact_Hunting\` and
 The rest of this lab refers to mounted paths as `E:\…`, so be sure to **substitute your actual drive letter** if Windows assigned a different one.
 
 <Figure
-  src="https://placehold.co/900x420?text=Mounted+KAPE+VHDX+in+Explorer"
+  src={mountedVhdxExplorer}
   alt="File Explorer showing the mounted KAPE triage VHDX as a new drive letter, with a single top-level C\ folder containing Windows, Users, and other source-volume directories"
   caption="The mounted KAPE collection in Explorer. The top-level C\ folder reflects the source machine's volume letter, preserved by KAPE during collection. Everything KAPE copied sits underneath that folder in its original directory structure."
   width={800}
@@ -101,7 +115,7 @@ In Registry Explorer: **File → Load hive** and browse to `E:\C\Windows\System3
 Registry Explorer will pop a **Dirty hive detected!** dialog. This is a very common occurrence when collecting Registry hives. While Windows is running, the `SOFTWARE` hive is in active use, and recent writes live in transaction log files (`SOFTWARE.LOG1`, `SOFTWARE.LOG2`) until they get merged back into the hive itself.
 
 <Figure
-  src="https://placehold.co/900x320?text=Registry+Explorer+Dirty+Hive+dialog"
+  src={dirtyHiveDialog}
   alt="Registry Explorer's 'Dirty hive detected!' modal dialog asking whether to replay transaction logs against the loaded hive"
   caption="Registry Explorer flags the SOFTWARE hive as dirty because its transaction logs have unmerged writes."
   width={700}
@@ -133,10 +147,9 @@ ROOT > Microsoft > Windows NT > CurrentVersion
 In the right-hand pane you'll see the familiar set of values: `ProductName`, `DisplayVersion`, `CurrentBuild`, `UBR`, plus an `InstallDate` and a handful of others. Together these identify the OS down to the build and update level.
 
 <Figure
-  src="https://placehold.co/900x520?text=Registry+Explorer+SOFTWARE+hive+CurrentVersion"
+  src={softwareCurrentVersion}
   alt="Registry Explorer with the SOFTWARE hive loaded offline, the Microsoft\Windows NT\CurrentVersion key selected, and ProductName, DisplayVersion, CurrentBuild, and UBR visible in the values pane"
   caption="The CurrentVersion key in the offline SOFTWARE hive, with ProductName, DisplayVersion, CurrentBuild, and UBR visible in the right pane."
-  width={800}
 />
 
 <Question id="lab-7-1-q1" label="Q1" type="text" accept="Windows 10 Enterprise Evaluation, windows 10 enterprise evaluation">
@@ -200,10 +213,9 @@ PECmd processes every `.pf` file in the directory and writes **two CSVs** into `
 - The **timeline** (`<timestamp>_PECmd_Output_Timeline.csv`) expands each `.pf`'s eight timestamps into individual rows so the whole machine's execution history sorts chronologically.
 
 <Figure
-  src="https://placehold.co/900x320?text=PECmd+console+output+after+parsing+the+Prefetch+folder"
+  src={pecmdConsole}
   alt="PowerShell window showing PECmd's final summary lines after processing the Prefetch folder, naming the two output CSVs and the directory they were written to"
   caption="PECmd finishing a directory-mode parse. The final lines name the two output CSVs and the destination directory."
-  width={800}
 />
 
 **Timeline Explorer**<Cite id="zimmerman-tools" /> is Eric Zimmerman's CSV viewer built for the kind of output his parsers produce. It's a forensic-flavored spreadsheet view with filtering, sorting, and column-pinning that handles the typically wide forensic CSVs without the awkwardness of opening them in Excel. Open the summary output file (`<timestamp>_PECmd_Output.csv`, not the timeline one) in Timeline Explorer:
@@ -215,10 +227,9 @@ C:\Forensics\Tools\Zimmerman\TimelineExplorer\TimelineExplorer.exe
 Each row is one Prefetch file. Sort by `RunCount` to see which executables ran most, or by `LastRun` to surface the most recent execution activity on the box.
 
 <Figure
-  src="https://placehold.co/900x520?text=Timeline+Explorer+with+PECmd+summary+CSV"
+  src={tePecmdSummary}
   alt="Timeline Explorer displaying the PECmd summary CSV with rows for various executables and the SourceFilename, Executable, RunCount, and LastRun columns prominent"
   caption="The PECmd summary CSV in Timeline Explorer. SourceFilename, RunCount, and LastRun give an immediate read on which executables ran most and when."
-  width={800}
 />
 
 <Question id="lab-7-1-q6" label="Q6" type="text" accept="MICROSOFTEDGEUPDATE.EXE, microsoftedgeupdate.exe, MicrosoftEdgeUpdate.exe">
@@ -282,10 +293,9 @@ LECmd.exe -d 'E:\C\Users\mhansen\AppData\Roaming\Microsoft\Windows\Recent\' --cs
 LECmd processes every `.lnk` in the directory and writes one CSV into `exports\lnk\`, named `<timestamp>_LECmd_Output.csv`. One row per parsed LNK, every metadata field broken out as its own column.
 
 <Figure
-  src="https://placehold.co/900x320?text=LECmd+console+output"
+  src={lecmdConsole}
   alt="PowerShell window showing LECmd's final summary lines after processing the Recent directory, naming the output CSV and the count of LNK files parsed"
   caption="LECmd finishing a directory-mode parse. The final lines name the output CSV and the count of LNK files processed."
-  width={800}
 />
 
 Now, open the LECmd output CSV in Timeline Explorer:
@@ -297,10 +307,9 @@ C:\Forensics\Tools\Zimmerman\TimelineExplorer\TimelineExplorer.exe
 Each row is one LNK. The `LocalPath` column records the full target path including the original drive letter, even if that volume is no longer attached. The `TargetCreated`, `TargetModified`, and `TargetAccessed` columns describe the original target file (separate from the LNK file's own MAC times, which sit in their own columns).
 
 <Figure
-  src="https://placehold.co/900x520?text=Timeline+Explorer+with+LECmd+output"
+  src={teLecmdOutput}
   alt="Timeline Explorer displaying the LECmd output CSV with rows for various .lnk files and the SourceFile, LocalPath, TargetCreated, TargetModified, and TargetAccessed columns visible"
   caption="The LECmd CSV in Timeline Explorer. SourceFile and LocalPath show which shortcut you're looking at and where the target file originally lived."
-  width={800}
 />
 
 <Question id="lab-7-1-q10" label="Q10" type="text" accept="C:\Users\mhansen\Desktop\c4611_02.pdf, c:\users\mhansen\desktop\c4611_02.pdf, c4611_02.pdf">
@@ -356,10 +365,9 @@ RBCmd.exe -d 'E:\C\$Recycle.Bin\' --csv 'C:\Forensics\Exercises\iwf\Artifact_Hun
 RBCmd recurses into every SID subfolder, parses every `$I` file it finds, and writes one CSV (named like `<timestamp>_RBCmd_Output.csv`) with one row per recovered deletion event.
 
 <Figure
-  src="https://placehold.co/900x320?text=RBCmd+console+output"
+  src={rbcmdConsole}
   alt="PowerShell window showing RBCmd's final summary lines after parsing the Recycle Bin tree, naming the output CSV and the count of $I files parsed"
   caption="RBCmd finishing a directory-mode parse. The final lines name the output CSV and the count of $I files processed."
-  width={800}
 />
 
 Open the RBCmd output CSV in Timeline Explorer:
@@ -371,10 +379,9 @@ C:\Forensics\Tools\Zimmerman\TimelineExplorer\TimelineExplorer.exe
 Each row is one deletion event. The `FileName` column carries the original full path of the deleted file with the drive letter intact, `FileSize` is the original size in bytes, and `DeletedOn` is the timestamp of the delete. To actually recover any of these, find the matching `$R` file in the same SID subfolder under the mounted image and rename it back to its original name.
 
 <Figure
-  src="https://placehold.co/900x520?text=Timeline+Explorer+with+RBCmd+output"
+  src={teRbcmdOutput}
   alt="Timeline Explorer displaying the RBCmd output CSV with rows for various deleted files and the FileName, FileSize, and DeletedOn columns visible"
   caption="The RBCmd CSV in Timeline Explorer. FileName, FileSize, and DeletedOn give immediate visibility into what was deleted, how big it was, and when."
-  width={800}
 />
 
 <Question id="lab-7-1-q14" label="Q14" type="text" accept="3, three">
@@ -430,19 +437,17 @@ ROOT > ControlSet001 > Enum > USBSTOR
 Each subkey under `USBSTOR` represents one device class (vendor + product + revision), with names that look like `Disk&Ven_SanDisk&Prod_Cruzer_Blade&Rev_1.00`.
 
 <Figure
-  src="https://placehold.co/900x460?text=USBSTOR+expanded+in+Registry+Explorer"
+  src={usbstorExpanded}
   alt="Registry Explorer with the merged SYSTEM hive loaded and ControlSet001\Enum\USBSTOR expanded in the left tree, showing the SanDisk Cruzer Blade class subkey"
   caption="USBSTOR expanded in Registry Explorer. The single class subkey on this image is the SanDisk Cruzer Blade that was plugged into the source system."
-  width={800}
 />
 
 Inside the SanDisk class subkey, the next level is the device instance subkey, keyed by the device's **serial number** (`00016223081722125641&0`). Click into it. The values pane shows `FriendlyName` (the device name as it appears in Explorer), `DeviceDesc` (a longer device description), and an attached `Properties` subtree carrying Windows-managed timestamps for first-install, first-arrival, last-arrival, and last-removal events.
 
 <Figure
-  src="https://placehold.co/900x520?text=Device+instance+subkey+values+pane"
+  src={usbDeviceInstance}
   alt="Registry Explorer with the SanDisk device instance subkey selected, showing FriendlyName, DeviceDesc, and a Properties subkey in the values pane on the right"
   caption="The device instance subkey selected, with FriendlyName and DeviceDesc visible in the right pane and the Properties subtree underneath."
-  width={800}
 />
 
 #### USB timestamps
@@ -458,10 +463,9 @@ Inside the GUID node are numerically-named subkeys, each carrying a 64-bit FILET
 
 
 <Figure
-  src="https://placehold.co/900x460?text=0064+first-install+timestamp"
+  src={usbInstallTimestamp}
   alt="Registry Explorer showing the 0064 subkey under the device-install GUID, with the decoded FILETIME timestamp value displayed in the values pane"
   caption="The 0064 subkey under the device-install GUID. Registry Explorer decodes the raw binary FILETIME to a human-readable date and time."
-  width={800}
 />
 
 Notice that this image doesn't have a `0067` subkey at all. The triage capture was taken while the SanDisk was still plugged into the source system, so Windows never had occasion to record a last-removal event. The other three timestamps (`0064`, `0065`, `0066`) are present because those events all happened (install, driver load, connect) before the snapshot.
@@ -481,10 +485,9 @@ Select-String -Path 'E:\C\Windows\INF\setupapi.dev.log' -Pattern '>>>\s+\[Device
 Cross-reference the device paths and timestamps you find here against the USBSTOR data above to build a complete attached-device timeline. One catch: `setupapi.dev.log` records timestamps in the **source system's local time**, while the registry's `0064` value is a **FILETIME stored in UTC**. The same install event reads as two different timestamps depending on which source you're looking at, so you have to add or subtract the source machine's UTC offset before they line up.
 
 <Figure
-  src="https://placehold.co/900x520?text=setupapi.dev.log+Select-String+output"
+  src={setupapiSelectString}
   alt="PowerShell window showing Select-String output against setupapi.dev.log, with one or more '>>>  [Device Install (Hardware initiated) - SWD\WPDBUSENUM\_??_USBSTOR#...]' records visible along with the surrounding context lines"
   caption="Select-String surfaces every USB device install in setupapi.dev.log along with the surrounding lines that carry the hardware ID and install timestamp."
-  width={800}
 />
 
 <Question id="lab-7-1-q18" label="Q18" type="text" accept="SanDisk Cruzer Blade USB Device, sandisk cruzer blade usb device, SanDisk Cruzer Blade">
