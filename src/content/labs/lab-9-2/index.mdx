@@ -224,11 +224,11 @@ On the **unencrypted** path, you can afford to (and generally should always) pow
   <Solution>`AES 128`. This matches the `-EncryptionMethod Aes128` argument the prep script passed to `Enable-BitLocker`. The other Windows-supported options would have been AES 256, XTS-AES 128, or XTS-AES 256.</Solution>
 </Question>
 
-<Question id="lab-9-2-q5" label="Q5" type="text" accept="Fully Decrypted">
-  Look at the `manage-bde -status` output for the `C:` volume. What `Conversion Status` does it report?
+<Question id="lab-9-2-q5" label="Q5" type="text" accept="Fully Encrypted">
+  Look at the `manage-bde -status` output for the `Z:` volume. What `Conversion Status` does it report?
 
-  <Hint>The `C:` block sits above the `Z:` block in the manage-bde output.</Hint>
-  <Solution>`Fully Decrypted`. The lab VM's system drive has no BitLocker enabled, so both EDD and `manage-bde` report it as clean.</Solution>
+  <Hint>The `Z:` block sits below the `C:` block in the manage-bde output.</Hint>
+  <Solution>`Fully Encrypted`. The prep step ran BitLocker to completion on the `Z:` volume, so `manage-bde` reports the conversion as finished, matching EDD's encrypted finding.</Solution>
 </Question>
 
 ## Wrapping Up
